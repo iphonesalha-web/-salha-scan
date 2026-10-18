@@ -1,0 +1,2397 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>صالحة سكان</title>
+
+    <!-- iPhone / PWA -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="صالحة سكان">
+    <meta name="theme-color" content="#ffffff">
+    <meta name="format-detection" content="telephone=no">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+
+    <!-- All libraries are bundled locally so the app works offline -->
+    <link rel="stylesheet" href="vendor/app.css">
+    <link rel="stylesheet" href="vendor/fa/css/all.min.css">
+    <script src="vendor/pdf.min.js"></script>
+    <script src="vendor/jspdf.umd.min.js"></script>
+    <script src="vendor/tesseract/tesseract.min.js"></script>
+
+    <style>
+        :root {
+            --sat: env(safe-area-inset-top, 0px);
+            --sab: env(safe-area-inset-bottom, 0px);
+        }
+        .safe-top { padding-top: calc(var(--sat) + 0.75rem) !important; }
+        .safe-top-tight { padding-top: calc(var(--sat) + 0.5rem) !important; }
+        .nav-safe { bottom: calc(var(--sab) + 0.5rem) !important; }
+        .pb-nav { padding-bottom: calc(var(--sab) + 7rem) !important; }
+        .toast-safe { top: calc(var(--sat) + 0.75rem) !important; }
+        input, textarea { user-select: text; -webkit-user-select: text; }
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            font-family: 'Cairo', sans-serif;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100dvh;
+            overflow: hidden;
+            background-color: #f6f7f9;
+            color: #1e293b;
+            user-select: none;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .cs-teal-bg {
+            background-color: #16a085;
+        }
+        .cs-teal-text {
+            color: #16a085;
+        }
+        .floating-pill-nav {
+            background: rgba(255, 255, 255, 0.96);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12), 0 1px 4px rgba(15, 23, 42, 0.06);
+        }
+        .nav-tab-active {
+            background-color: #f1f3f6;
+            color: #16a085 !important;
+            font-weight: 800;
+        }
+        .cs-ai-banner {
+            background: linear-gradient(115deg, #eef7ff 0%, #e3f6f5 50%, #cdeee9 100%);
+        }
+        .canvas-checker {
+            background-color: #0f172a;
+            background-image: radial-gradient(#1e293b 1px, transparent 1px);
+            background-size: 16px 16px;
+        }
+        .editor-tool-active {
+            background-color: rgba(22, 160, 133, 0.25) !important;
+            border-color: #16a085 !important;
+            color: #2dd4bf !important;
+        }
+    </style>
+</head>
+<body class="flex flex-col">
+
+    <!-- Hidden File Inputs for Real Import & Camera -->
+    <input type="file" id="importPdfInput" accept="application/pdf,image/*" multiple class="hidden">
+    <input type="file" id="importImageInput" accept="image/*" multiple class="hidden">
+    <input type="file" id="cameraCaptureInput" accept="image/*" capture="environment" class="hidden">
+    <input type="file" id="mergeFilesInput" accept="application/pdf,image/*" multiple class="hidden">
+
+    <!-- MAIN SCROLLABLE SCREENS VIEWPORT -->
+    <div id="mainViewport" class="flex-1 overflow-y-auto no-scrollbar pb-nav">
+
+        <!-- ===================================================================
+             SCREEN 1: الصفحة الرئيسية (Matches Screenshot 1)
+             =================================================================== -->
+        <section id="screen-home" class="safe-top bg-white min-h-full px-4 pt-3 pb-6">
+            <!-- Top Search Input -->
+            <div class="bg-[#f3f4f6] rounded-full px-4 py-2.5 flex items-center gap-2.5 mb-5">
+                <i class="fa-solid fa-magnifying-glass text-gray-500 text-sm"></i>
+                <input id="homeSearchInput" oninput="handleSearchDocs(this.value)" type="text"
+                    placeholder='البحث عن التطبيقات، كـ "OCR"'
+                    class="bg-transparent w-full text-xs text-gray-700 placeholder-gray-400 focus:outline-none">
+            </div>
+
+            <!-- 2x4 Circular Icon Grid (Exact 8 Shortcuts from Screenshot 1) -->
+            <div class="grid grid-cols-4 gap-y-5 gap-x-2 text-center mb-6">
+                <!-- 1. المسح الضوئي -->
+                <button onclick="openCameraScanner()" class="flex flex-col items-center gap-1.5 active:scale-95 transition">
+                    <div class="w-14 h-14 rounded-full bg-[#eef8f6] flex items-center justify-center shadow-sm border border-[#e0f2ef]">
+                        <i class="fa-solid fa-expand text-[#16a085] text-xl"></i>
+                    </div>
+                    <span class="text-[11px] font-bold text-gray-800 leading-tight">المسح الضوئي</span>
+                </button>
+
+                <!-- 2. أدوات PDF -->
+                <button onclick="switchMainTab('tools')" class="flex flex-col items-center gap-1.5 active:scale-95 transition">
+                    <div class="w-14 h-14 rounded-full bg-[#fff2ee] flex items-center justify-center shadow-sm border border-[#ffe4dc]">
+                        <i class="fa-solid fa-file-pdf text-[#ea6b4b] text-xl"></i>
+                    </div>
+                    <span class="text-[11px] font-bold text-gray-800 leading-tight">أدوات PDF</span>
+                </button>
+
+                <!-- 3. استيراد الصور -->
+                <button onclick="document.getElementById('importImageInput').click()" class="flex flex-col items-center gap-1.5 active:scale-95 transition">
+                    <div class="w-14 h-14 rounded-full bg-[#eef3ff] flex items-center justify-center shadow-sm border border-[#dce6ff]">
+                        <i class="fa-solid fa-image text-[#4c7ef3] text-xl"></i>
+                    </div>
+                    <span class="text-[11px] font-bold text-gray-800 leading-tight">استيراد الصور</span>
+                </button>
+
+                <!-- 4. استيراد الملفات -->
+                <button onclick="document.getElementById('importPdfInput').click()" class="flex flex-col items-center gap-1.5 active:scale-95 transition">
+                    <div class="w-14 h-14 rounded-full bg-[#eef3ff] flex items-center justify-center shadow-sm border border-[#dce6ff]">
+                        <i class="fa-solid fa-folder-open text-[#4c7ef3] text-xl"></i>
+                    </div>
+                    <span class="text-[11px] font-bold text-gray-800 leading-tight">استيراد الملفات</span>
+                </button>
+
+                <!-- 5. بطاقات الهوية -->
+                <button onclick="launchIdCardScanner()" class="flex flex-col items-center gap-1.5 active:scale-95 transition">
+                    <div class="w-14 h-14 rounded-full bg-[#eef8f6] flex items-center justify-center shadow-sm border border-[#e0f2ef]">
+                        <i class="fa-solid fa-id-card text-[#2ea88c] text-xl"></i>
+                    </div>
+                    <span class="text-[11px] font-bold text-gray-800 leading-tight">بطاقات الهوية</span>
+                </button>
+
+                <!-- 6. استخراج النص -->
+                <button onclick="openDocWithTool(0, 'ocr')" class="flex flex-col items-center gap-1.5 active:scale-95 transition">
+                    <div class="w-14 h-14 rounded-full bg-[#eef8f6] flex items-center justify-center shadow-sm border border-[#e0f2ef]">
+                        <div class="w-7 h-7 rounded bg-[#2ea88c] text-white font-black text-sm flex items-center justify-center">T</div>
+                    </div>
+                    <span class="text-[11px] font-bold text-gray-800 leading-tight">استخراج النص</span>
+                </button>
+
+                <!-- 7. صانع الصور ID -->
+                <button onclick="launchIdPhotoMaker()" class="flex flex-col items-center gap-1.5 active:scale-95 transition">
+                    <div class="w-14 h-14 rounded-full bg-[#eef3ff] flex items-center justify-center shadow-sm border border-[#dce6ff]">
+                        <i class="fa-solid fa-id-badge text-[#4c7ef3] text-xl"></i>
+                    </div>
+                    <span class="text-[11px] font-bold text-gray-800 leading-tight">صانع الصور ID</span>
+                </button>
+
+                <!-- 8. الكل -->
+                <button onclick="switchMainTab('tools')" class="flex flex-col items-center gap-1.5 active:scale-95 transition">
+                    <div class="w-14 h-14 rounded-full bg-[#eef8f6] flex items-center justify-center shadow-sm border border-[#e0f2ef]">
+                        <i class="fa-solid fa-table-cells-large text-[#2ea88c] text-xl"></i>
+                    </div>
+                    <span class="text-[11px] font-bold text-gray-800 leading-tight">الكل</span>
+                </button>
+            </div>
+
+            <!-- Section Header: الأخيرة / عرض الكل -->
+            <div class="flex items-center justify-between mb-3 pt-1">
+                <h2 class="text-xl font-black text-gray-900">الأخيرة</h2>
+                <button onclick="switchMainTab('docs')" class="text-xs font-bold text-gray-400 flex items-center gap-1">
+                    <span>عرض الكل</span>
+                    <i class="fa-solid fa-chevron-left text-[10px]"></i>
+                </button>
+            </div>
+
+            <!-- Recent Documents Container -->
+            <div id="homeRecentDocsList" class="divide-y divide-gray-100">
+                <!-- Populated dynamically -->
+            </div>
+        </section>
+
+        <!-- ===================================================================
+             SCREEN 2: كل المستندات (Matches Screenshot 5)
+             =================================================================== -->
+        <section id="screen-docs" class="safe-top hidden min-h-full px-4 pt-3 pb-6 space-y-4">
+            <!-- Top Search & Cloud Storage Row -->
+            <div class="flex items-center justify-between gap-3">
+                <div class="bg-white rounded-full px-4 py-2 flex items-center gap-2 flex-1 shadow-sm border border-gray-100">
+                    <i class="fa-solid fa-magnifying-glass text-gray-400 text-xs"></i>
+                    <input oninput="handleSearchDocs(this.value)" type="text" placeholder="البحث"
+                        class="bg-transparent w-full text-xs text-gray-700 placeholder-gray-400 focus:outline-none">
+                </div>
+
+                <!-- On-device storage indicator (real values) -->
+                <div class="flex items-center gap-2 shrink-0" dir="ltr">
+                    <div class="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center text-sky-400">
+                        <i class="fa-solid fa-mobile-screen text-base"></i>
+                    </div>
+                    <div class="text-right">
+                        <div class="storage-label text-[10px] font-bold text-gray-500">—</div>
+                        <div class="w-28 h-1.5 bg-gray-200 rounded-full overflow-hidden mt-0.5">
+                            <div class="storage-bar bg-sky-400 h-full rounded-full float-right" style="width:0%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3 White Rectangular Action Cards -->
+            <div class="grid grid-cols-3 gap-2.5 text-center">
+                <button onclick="document.getElementById('importPdfInput').click()" class="bg-white rounded-2xl p-3.5 shadow-sm border border-gray-100 flex flex-col items-center gap-2 active:scale-95 transition">
+                    <div class="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center text-blue-500 text-xl">
+                        <i class="fa-solid fa-file-lines"></i>
+                    </div>
+                    <span class="text-[11px] font-bold text-gray-800">استيراد المستندات</span>
+                </button>
+
+                <button onclick="document.getElementById('importImageInput').click()" class="bg-white rounded-2xl p-3.5 shadow-sm border border-gray-100 flex flex-col items-center gap-2 active:scale-95 transition">
+                    <div class="w-11 h-11 rounded-xl bg-sky-50 flex items-center justify-center text-sky-400 text-xl">
+                        <i class="fa-solid fa-images"></i>
+                    </div>
+                    <span class="text-[11px] font-bold text-gray-800">استيراد صور</span>
+                </button>
+
+                <button onclick="openCreateFolderModal()" class="bg-white rounded-2xl p-3.5 shadow-sm border border-gray-100 flex flex-col items-center gap-2 active:scale-95 transition">
+                    <div class="w-11 h-11 rounded-xl bg-[#eef8f6] flex items-center justify-center text-[#2ea88c] text-xl">
+                        <i class="fa-solid fa-folder-plus"></i>
+                    </div>
+                    <span class="text-[11px] font-bold text-gray-800">إنشاء مجلد</span>
+                </button>
+            </div>
+
+            <!-- Filter Bar: الكل (115) ▾ on right, sort/grid/select on left -->
+            <div class="flex items-center justify-between pt-2">
+                <button onclick="resetDocFilter()" class="flex items-center gap-1 text-gray-900">
+                    <span class="text-lg font-black">الكل</span>
+                    <span id="allDocsCounterLabel" class="text-sm text-gray-400 font-semibold">(0)</span>
+                    <i class="fa-solid fa-caret-down text-xs text-gray-600 mr-0.5"></i>
+                </button>
+
+                <div class="flex items-center gap-4 text-gray-700 text-base">
+                    <button onclick="reverseDocsList()" title="فرز"><i class="fa-solid fa-arrow-down-wide-short"></i></button>
+                    <button onclick="showToast('تم تبديل طريقة العرض')" title="شبكة"><i class="fa-solid fa-border-all"></i></button>
+                    <button onclick="showToast('وضع التحديد المتعدد مفعّل')" title="تحديد"><i class="fa-regular fa-square-check"></i></button>
+                </div>
+            </div>
+
+            <!-- Folders List (المستندات الموقّعة & ID-Ordner HOT) -->
+            <div id="foldersListContainer" class="space-y-2.5">
+                <!-- Folder 1: المستندات الموقّعة -->
+                <div onclick="filterSignedDocsOnly()" class="bg-[#f2f4f7] hover:bg-gray-200/70 rounded-2xl p-3.5 flex items-center justify-between cursor-pointer transition">
+                    <div class="flex items-center gap-3.5">
+                        <div class="w-11 h-10 rounded-lg bg-[#52b79a] text-white flex items-center justify-center text-lg shadow-sm">
+                            <i class="fa-solid fa-file-signature"></i>
+                        </div>
+                        <span class="font-bold text-sm text-gray-900">المستندات الموقّعة</span>
+                    </div>
+                </div>
+
+                <!-- Folder 2: ID-Ordner HOT -->
+                <div onclick="launchIdCardScanner()" class="bg-[#f2f4f7] hover:bg-gray-200/70 rounded-2xl p-3.5 flex items-center justify-between cursor-pointer transition">
+                    <div class="flex items-center gap-3.5">
+                        <div class="w-11 h-10 rounded-lg bg-[#52b79a] text-white flex items-center justify-center text-lg shadow-sm">
+                            <i class="fa-regular fa-id-card"></i>
+                        </div>
+                        <div class="text-right">
+                            <div class="flex items-center gap-1.5">
+                                <span class="font-extrabold text-sm text-gray-900">بطاقات الهوية</span>
+                            </div>
+                            <div class="text-[11px] text-gray-400 mt-0.5">مسح بطاقة هوية جديدة</div>
+                        </div>
+                    </div>
+                    <span class="text-gray-400 px-2"><i class="fa-solid fa-ellipsis"></i></span>
+                </div>
+            </div>
+
+            <!-- Full Scanned Documents List -->
+            <div id="allDocsFullList" class="bg-white rounded-2xl px-3 divide-y divide-gray-100 shadow-sm border border-gray-100">
+                <!-- Populated dynamically -->
+            </div>
+        </section>
+
+        <!-- ===================================================================
+             SCREEN 3: أدوات (Matches Screenshots 2, 3, 4)
+             =================================================================== -->
+        <section id="screen-tools" class="safe-top hidden bg-white min-h-full px-4 pt-3 pb-8 space-y-6">
+            <!-- Tools Top Header -->
+            <div class="flex items-center justify-between">
+                <h1 class="text-xl font-black text-gray-900">أدوات</h1>
+
+                <button onclick="showToast('جميع أدوات الـ PDF تعمل على جهازك بدون إنترنت')" class="bg-[#e8f6f3] text-[#16a085] px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5">
+                    <i class="fa-regular fa-file-lines"></i>
+                    <span>الميزات الجديدة</span>
+                </button>
+
+                <button onclick="switchMainTab('home')" class="text-gray-800 text-lg p-1">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                </button>
+            </div>
+
+            <!-- CS AI Gradient Banner Card (Screenshot 3) -->
+            <div onclick="openDocWithTool(0, 'ocr')" class="cs-ai-banner rounded-2xl p-4 flex items-center justify-between cursor-pointer shadow-sm border border-teal-100/80 relative overflow-hidden">
+                <div class="flex items-center gap-3 z-10">
+                    <div class="w-12 h-12 rounded-2xl bg-slate-900 text-teal-300 flex items-center justify-center text-xl shadow-md border-2 border-white">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    </div>
+                    <div>
+                        <div class="text-xs font-bold text-teal-800">الماسح الذكي واستخراج النصوص</div>
+                        <div class="text-[10px] text-slate-500">انقر لتشغيل الذكاء الاصطناعي على مستندك</div>
+                    </div>
+                </div>
+                <div class="text-2xl font-black tracking-tight text-slate-900 z-10 flex items-center gap-1" dir="ltr">
+                    <span>OCR</span>
+                    <i class="fa-solid fa-wand-magic-sparkles text-sm text-slate-800"></i>
+                </div>
+            </div>
+
+            <!-- Category 1: المسح الضوئي -->
+            <div>
+                <h3 class="text-sm font-black text-gray-900 mb-3.5">المسح الضوئي</h3>
+                <div class="grid grid-cols-4 gap-y-5 gap-x-2 text-center">
+                    <button onclick="launchIdCardScanner()" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef8f6] flex items-center justify-center text-[#2ea88c] text-xl">
+                            <i class="fa-solid fa-id-card"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">بطاقات الهوية</span>
+                    </button>
+
+                    <button onclick="openDocWithTool(0, 'ocr')" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef8f6] flex items-center justify-center">
+                            <div class="w-7 h-7 rounded bg-[#2ea88c] text-white font-black text-sm flex items-center justify-center">T</div>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">استخراج نص</span>
+                    </button>
+
+                    <button onclick="launchIdPhotoMaker()" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef3ff] flex items-center justify-center text-[#4c7ef3] text-xl">
+                            <i class="fa-solid fa-id-badge"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800 leading-tight">صانع صورة بطاقة الهوية</span>
+                    </button>
+
+                    <button onclick="openDocWithTool(0, 'ocr')" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef8f6] flex items-center justify-center text-[#2ea88c] text-xs font-black">
+                            <span class="bg-[#2ea88c] text-white px-1.5 py-1 rounded">√Σ</span>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">الصيغة</span>
+                    </button>
+
+                    <button onclick="openDocWithTool(0, 'translate')" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef3ff] flex items-center justify-center text-[#4c7ef3] text-xl">
+                            <i class="fa-solid fa-language"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">ترجمة الصورة</span>
+                    </button>
+
+                    <button onclick="openCameraScanner()" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef6fa] flex items-center justify-center text-[#3b96b8] text-xl">
+                            <i class="fa-solid fa-book-open"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">الكتب</span>
+                    </button>
+
+                    <button onclick="exportDocToPPT(0)" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#fff2ee] flex items-center justify-center text-[#ea6b4b] text-xl">
+                            <i class="fa-solid fa-person-chalkboard"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">PPT</span>
+                    </button>
+
+                    <button onclick="openCameraScanner()" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef6fa] flex items-center justify-center text-[#3b96b8] text-xl">
+                            <i class="fa-solid fa-chalkboard"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">اللوحة البيضاء</span>
+                    </button>
+
+                    <button onclick="openDocWithTool(0, 'timestamp')" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef3ff] flex items-center justify-center text-[#4c7ef3] text-xl">
+                            <i class="fa-solid fa-clock"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">الطابع الزمني</span>
+                    </button>
+
+                    <button onclick="openCameraScanner()" class="flex flex-col items-center gap-1.5 relative">
+                        <span class="absolute -top-1 left-2 bg-[#ef5350] text-white text-[9px] font-bold px-1.5 rounded-full">New</span>
+                        <div class="w-14 h-14 rounded-full bg-[#eef8f6] flex items-center justify-center text-[#2ea88c] text-xl">
+                            <i class="fa-solid fa-expand"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">ميجا سكان</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Category 2: استيراد -->
+            <div>
+                <h3 class="text-sm font-black text-gray-900 mb-3.5">استيراد</h3>
+                <div class="grid grid-cols-4 gap-y-5 gap-x-2 text-center">
+                    <button onclick="document.getElementById('importImageInput').click()" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef8f6] flex items-center justify-center text-[#2ea88c] text-xl">
+                            <i class="fa-solid fa-image"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">استيراد الصور</span>
+                    </button>
+
+                    <button onclick="document.getElementById('importPdfInput').click()" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef3ff] flex items-center justify-center text-[#4c7ef3] text-xl">
+                            <i class="fa-solid fa-folder-open"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">استيراد الملفات</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Category 3: التحويل -->
+            <div>
+                <h3 class="text-sm font-black text-gray-900 mb-3.5">التحويل</h3>
+                <div class="grid grid-cols-4 gap-y-5 gap-x-2 text-center">
+                    <button onclick="exportDocToWord(0)" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef3ff] flex items-center justify-center text-[#4c7ef3] text-lg font-black">
+                            <span class="border-2 border-[#4c7ef3] rounded px-1.5 py-0.5 text-xs">W</span>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">إلى Word</span>
+                    </button>
+
+                    <button onclick="exportDocToExcel(0)" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef8f2] flex items-center justify-center text-[#34a853] text-lg font-black">
+                            <span class="border-2 border-[#34a853] rounded px-1.5 py-0.5 text-xs">X</span>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">إلى Excel</span>
+                    </button>
+
+                    <button onclick="exportDocToPPT(0)" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#fff2ee] flex items-center justify-center text-[#ea6b4b] text-lg font-black">
+                            <span class="border-2 border-[#ea6b4b] rounded px-1.5 py-0.5 text-xs">P</span>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">تحويل إلى PPT</span>
+                    </button>
+
+                    <button onclick="exportDocAsJpgImages(0)" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef8f6] flex items-center justify-center text-[#2ea88c] text-xl">
+                            <i class="fa-solid fa-images"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800 leading-tight">من PDF إلى صور</span>
+                    </button>
+
+                    <button onclick="exportDocAsLongImage(0)" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef6fa] flex items-center justify-center text-[#3b96b8] text-xl">
+                            <i class="fa-solid fa-panorama"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800 leading-tight">ملفات PDF إلى صور طويلة</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Category 4: تحرير -->
+            <div>
+                <h3 class="text-sm font-black text-gray-900 mb-3.5">تحرير</h3>
+                <div class="grid grid-cols-4 gap-y-5 gap-x-2 text-center">
+                    <button onclick="openDocWithTool(0, 'sign')" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef8f6] flex items-center justify-center text-[#2ea88c] text-xl">
+                            <i class="fa-solid fa-feather-pointed"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">التوقيع</span>
+                    </button>
+
+                    <button onclick="openDocWithTool(0, 'watermark')" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef3ff] flex items-center justify-center text-[#4c7ef3] text-xl">
+                            <i class="fa-solid fa-stamp"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800 leading-tight">إضافة علامة مائية</span>
+                    </button>
+
+                    <button onclick="openDocWithTool(0, 'whiteout')" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef8f2] flex items-center justify-center text-[#4caf50] text-xl">
+                            <i class="fa-solid fa-eraser"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">المحو الذكي</span>
+                    </button>
+
+                    <button onclick="openDocWithTool(0, 'whiteout')" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef3ff] flex items-center justify-center text-[#4c7ef3] text-xl">
+                            <i class="fa-solid fa-ban"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">محو العلامات</span>
+                    </button>
+
+                    <button onclick="openDocWithTool(0, 'magic')" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#fff2ee] flex items-center justify-center text-[#ea6b4b] text-xl">
+                            <i class="fa-solid fa-wand-magic"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">استعادة الصورة</span>
+                    </button>
+
+                    <button onclick="document.getElementById('mergeFilesInput').click()" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef6fa] flex items-center justify-center text-[#3b96b8] text-xl">
+                            <i class="fa-solid fa-object-group"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">دمج الملفات</span>
+                    </button>
+
+                    <button onclick="openDocWithTool(0, 'extractPages')" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef3ff] flex items-center justify-center text-[#4c7ef3] text-xl">
+                            <i class="fa-solid fa-file-export"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">استخراج الصفحات</span>
+                    </button>
+
+                    <button onclick="openDocWithTool(0, 'reorder')" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef3ff] flex items-center justify-center text-[#4c7ef3] text-xl">
+                            <i class="fa-solid fa-sort"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800 leading-tight">إعادة ترتيب الصفحات</span>
+                    </button>
+
+                    <button onclick="openLockDocModal()" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef8f2] flex items-center justify-center text-[#4caf50] text-xl">
+                            <i class="fa-solid fa-lock"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">قفل</span>
+                    </button>
+
+                    <button onclick="compressCurrentPdf()" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef3ff] flex items-center justify-center text-[#4c7ef3] text-xl">
+                            <i class="fa-solid fa-compress"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">ضغط</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Category 5: الأدوات المساعدة (Screenshot 4) -->
+            <div>
+                <h3 class="text-sm font-black text-gray-900 mb-3.5">الأدوات المساعدة</h3>
+                <div class="grid grid-cols-4 gap-y-5 gap-x-2 text-center">
+                    <button onclick="openRulerToolModal()" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef8f6] flex items-center justify-center text-[#2ea88c] text-xl">
+                            <i class="fa-solid fa-ruler-combined"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">القياس</span>
+                    </button>
+
+                    <button onclick="openCountCamModal()" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef6fa] flex items-center justify-center text-[#3b96b8] text-xl">
+                            <i class="fa-solid fa-cubes"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800" dir="ltr">CountCam</span>
+                    </button>
+
+                    <button onclick="exportDocAsLongImage(0)" class="flex flex-col items-center gap-1.5 relative">
+                        <span class="absolute -top-1 left-2 bg-[#ef5350] text-white text-[9px] font-bold px-1.5 rounded-full">NEW</span>
+                        <div class="w-14 h-14 rounded-full bg-[#eef8f6] flex items-center justify-center text-[#2ea88c] text-xl">
+                            <i class="fa-solid fa-mobile-screen"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800 leading-tight">لقطة شاشة مطولة</span>
+                    </button>
+
+                    <button onclick="window.print()" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef8f6] flex items-center justify-center text-[#2ea88c] text-xl">
+                            <i class="fa-solid fa-print"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">طباعة</span>
+                    </button>
+
+                    <button onclick="openCameraScanner()" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef8f6] flex items-center justify-center text-[#2ea88c] text-xl">
+                            <i class="fa-solid fa-cube"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800 leading-tight">مسح ضوئي ثلاثي الأبعاد</span>
+                    </button>
+
+                    <button onclick="openQrGeneratorModal()" class="flex flex-col items-center gap-1.5">
+                        <div class="w-14 h-14 rounded-full bg-[#eef8f6] flex items-center justify-center text-[#2ea88c] text-xl">
+                            <i class="fa-solid fa-qrcode"></i>
+                        </div>
+                        <span class="text-[11px] font-bold text-gray-800">رمز QR</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===================================================================
+             SCREEN 4: أنا (Profile & Cloud Account Screen)
+             =================================================================== -->
+        <section id="screen-me" class="safe-top hidden min-h-full p-4 space-y-4">
+            <div class="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 flex items-center justify-between">
+                <div class="flex items-center gap-3.5">
+                    <img src="icons/icon-192.png" alt="" class="w-14 h-14 rounded-2xl shadow">
+                    <div>
+                        <h2 class="font-black text-base text-gray-900">صالحة سكان</h2>
+                        <p class="text-xs text-gray-400 mt-0.5">مستنداتك محفوظة على هذا الآيفون فقط، وتعمل بدون إنترنت</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 space-y-3">
+                <div class="flex items-center justify-between text-xs font-bold">
+                    <span class="text-gray-700">المساحة المستخدمة على الجهاز</span>
+                    <span class="storage-label text-sky-500" dir="ltr">—</span>
+                </div>
+                <div class="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div class="storage-bar bg-sky-400 h-full rounded-full" style="width:0%"></div>
+                </div>
+                <p id="installHint" class="hidden text-[11px] text-amber-700 bg-amber-50 rounded-xl p-2.5 leading-relaxed">
+                    لتثبيت التطبيق: اضغط زر المشاركة <i class="fa-solid fa-arrow-up-from-bracket"></i> في Safari ثم اختر «إضافة إلى الشاشة الرئيسية».
+                </p>
+            </div>
+
+            <div class="bg-white rounded-3xl divide-y divide-gray-100 shadow-sm border border-gray-100 text-xs font-bold text-gray-700">
+                <button onclick="switchMainTab('tools')" class="w-full p-4 flex items-center justify-between">
+                    <span><i class="fa-solid fa-wand-magic-sparkles text-teal-600 ml-2"></i> الأدوات واستخراج النصوص</span>
+                    <i class="fa-solid fa-chevron-left text-gray-300"></i>
+                </button>
+                <button onclick="filterSignedDocsOnly(); switchMainTab('docs')" class="w-full p-4 flex items-center justify-between">
+                    <span><i class="fa-solid fa-signature text-teal-600 ml-2"></i> إدارة التوقيعات والأختام الإلكترونية</span>
+                    <i class="fa-solid fa-chevron-left text-gray-300"></i>
+                </button>
+                <button onclick="exportCurrentDocToPDF(0)" class="w-full p-4 flex items-center justify-between">
+                    <span><i class="fa-solid fa-file-pdf text-teal-600 ml-2"></i> تصدير آخر مستند كـ PDF</span>
+                    <i class="fa-solid fa-chevron-left text-gray-300"></i>
+                </button>
+                <button onclick="confirmDeleteAllDocs()" class="w-full p-4 flex items-center justify-between text-rose-600">
+                    <span><i class="fa-solid fa-trash ml-2"></i> حذف كل المستندات</span>
+                    <i class="fa-solid fa-chevron-left text-gray-300"></i>
+                </button>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- ===================================================================
+         FLOATING PILL BOTTOM NAVIGATION BAR (Exact match to Screenshots 1-5)
+         =================================================================== -->
+    <div class="nav-safe fixed bottom-3 inset-x-3.5 z-30 pointer-events-none flex justify-center">
+        <nav class="floating-pill-nav w-full max-w-md h-16 rounded-full px-2 flex items-center justify-between pointer-events-auto border border-gray-200/80 relative">
+            
+            <!-- Tab 1: الصفحة الرئيسية (Rightmost in RTL) -->
+            <button id="bottomTab-home" onclick="switchMainTab('home')" class="nav-tab-active flex flex-col items-center justify-center h-12 px-3.5 rounded-full text-gray-600 transition">
+                <i class="fa-solid fa-house text-base"></i>
+                <span class="text-[10px] mt-0.5 leading-none">الصفحة الرئيسية</span>
+            </button>
+
+            <!-- Tab 2: كل المستندات -->
+            <button id="bottomTab-docs" onclick="switchMainTab('docs')" class="flex flex-col items-center justify-center h-12 px-3 rounded-full text-gray-600 transition">
+                <i class="fa-solid fa-folder text-base"></i>
+                <span class="text-[10px] mt-0.5 leading-none">كل المستندات</span>
+            </button>
+
+            <!-- Center Spacer for Protruding Teal Camera Button -->
+            <div class="w-14 shrink-0"></div>
+
+            <!-- Protruding Circular Teal Camera+ Button -->
+            <button onclick="openCameraScanner()"
+                class=" -top-3.5 left-1/2 -translate-x-1/2 absolute w-15 h-15 (w-[62px] h-[62px]) rounded-full bg-[#469d89] hover:bg-[#16a085] active:scale-95 text-white shadow-xl border-4 border-white flex items-center justify-center transition z-40"
+                style="width: 62px; height: 62px;"
+                aria-label="المسح الضوئي بالكاميرا">
+                <div class="relative flex items-center justify-center">
+                    <i class="fa-solid fa-camera text-2xl"></i>
+                    <span class="absolute -bottom-1 -right-2 bg-[#469d89] rounded-full text-xs font-black leading-none px-0.5">+</span>
+                </div>
+            </button>
+
+            <!-- Tab 3: أدوات -->
+            <button id="bottomTab-tools" onclick="switchMainTab('tools')" class="flex flex-col items-center justify-center h-12 px-4 rounded-full text-gray-600 transition">
+                <i class="fa-solid fa-table-cells-large text-base"></i>
+                <span class="text-[10px] mt-0.5 leading-none">أدوات</span>
+            </button>
+
+            <!-- Tab 4: أنا (Leftmost in RTL) -->
+            <button id="bottomTab-me" onclick="switchMainTab('me')" class="flex flex-col items-center justify-center h-12 px-4 rounded-full text-gray-600 transition">
+                <i class="fa-solid fa-user text-base"></i>
+                <span class="text-[10px] mt-0.5 leading-none">أنا</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- ===================================================================
+         FULL INTERACTIVE PDF & DOCUMENT EDITOR MODAL
+         =================================================================== -->
+    <div id="docEditorModal" class="hidden fixed inset-0 bg-slate-950 z-50 flex flex-col">
+        <!-- Editor Top Bar -->
+        <header class="safe-top-tight bg-slate-900 border-b border-slate-800 px-3 py-2 flex items-center justify-between gap-2 shrink-0">
+            <div class="flex items-center gap-2 min-w-0 flex-1">
+                <button onclick="closeDocEditor()" class="w-8 h-8 rounded-xl bg-slate-800 text-white flex items-center justify-center text-sm shrink-0">
+                    <i class="fa-solid fa-arrow-right"></i>
+                </button>
+                <div class="min-w-0 flex-1">
+                    <input id="editorTitleInput" type="text"
+                        class="bg-transparent text-white font-bold text-xs w-full truncate focus:outline-none border-b border-transparent focus:border-teal-400">
+                    <div id="editorPageIndicator" class="text-[10px] text-teal-400 font-bold">صفحة 1 من 1</div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-1.5 shrink-0">
+                <button onclick="confirmDeleteCurrentDoc()" class="w-8 h-8 rounded-xl bg-rose-950 text-rose-300 flex items-center justify-center text-xs" aria-label="حذف المستند">
+                    <i class="fa-solid fa-trash"></i>
+                </button>
+                <button onclick="document.getElementById('mergeFilesInput').click()" class="bg-slate-800 text-teal-300 border border-slate-700 px-2 py-1.5 rounded-xl text-[11px] font-bold">
+                    + دمج PDF/صور
+                </button>
+                <button onclick="exportDocToWord(currentDocIdx)" class="bg-blue-600 text-white px-2.5 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1">
+                    <span>To Word</span>
+                    <i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i>
+                </button>
+                <button onclick="exportCurrentDocToPDF(currentDocIdx)" class="cs-teal-bg text-white px-3 py-1.5 rounded-xl text-[11px] font-bold shadow">
+                    حفظ PDF
+                </button>
+            </div>
+        </header>
+
+        <!-- Interactive Canvas Area -->
+        <main class="flex-1 canvas-checker relative flex flex-col items-center justify-center overflow-hidden p-2 min-h-0">
+            <div id="editorHintBanner" class="mb-1.5 px-3 py-0.5 rounded-full bg-slate-900/90 border border-slate-700 text-[10px] text-slate-300">
+                وقّع بإصبعك، أو اسحب أي نص/ختم لتغيير مكانه على الصفحة
+            </div>
+
+            <div class="relative flex-1 w-full flex items-center justify-center overflow-hidden min-h-0">
+                <canvas id="editorCanvas" class="max-w-full max-h-full object-contain rounded shadow-2xl bg-white touch-none"></canvas>
+
+                <!-- Magnifier Loupe for 4-Point Perspective Crop -->
+                <div id="editorLoupe" class="hidden absolute top-2 right-2 w-24 h-24 rounded-full border-4 border-teal-400 shadow-2xl overflow-hidden bg-slate-950 pointer-events-none z-30">
+                    <canvas id="loupeCanvas" width="96" height="96" class="w-full h-full"></canvas>
+                </div>
+            </div>
+
+            <!-- Selected Draggable Text/Stamp Controls -->
+            <div id="selectedAnnotationBar" class="hidden absolute bottom-2 left-1/2 -translate-x-1/2 bg-slate-900/95 border border-slate-700 px-3 py-1.5 rounded-2xl flex items-center gap-2 shadow-xl z-20">
+                <button onclick="resizeSelectedAnnotation(1.15)" class="px-2 py-1 bg-slate-800 text-white rounded-lg text-xs">➕ تكبير</button>
+                <button onclick="resizeSelectedAnnotation(0.85)" class="px-2 py-1 bg-slate-800 text-white rounded-lg text-xs">➖ تصغير</button>
+                <button onclick="deleteSelectedAnnotation()" class="px-2.5 py-1 bg-rose-600 text-white rounded-lg text-xs font-bold">🗑️ حذف</button>
+            </div>
+        </main>
+
+        <!-- Multi-Page Strip & Page Reorder/Rotate/Extract Controls -->
+        <div class="bg-slate-900 border-t border-slate-800 px-3 py-1.5 flex items-center justify-between gap-2 shrink-0">
+            <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-1 py-0.5">
+                <div id="editorPagePills" class="flex items-center gap-1.5"></div>
+                <button onclick="addBlankPageToCurrentDoc()" class="px-2 py-1 rounded-lg bg-slate-800 text-teal-400 border border-slate-700 text-[10px] font-bold shrink-0">
+                    + صفحة
+                </button>
+            </div>
+            <div class="flex items-center gap-1 border-r border-slate-800 pr-2 shrink-0 text-white">
+                <button onclick="rotateActivePage()" class="w-7 h-7 rounded-lg bg-slate-800 text-xs" title="تدوير">🔄</button>
+                <button onclick="reorderActivePage(-1)" class="w-7 h-7 rounded-lg bg-slate-800 text-xs" title="تقديم">➡️</button>
+                <button onclick="reorderActivePage(1)" class="w-7 h-7 rounded-lg bg-slate-800 text-xs" title="تأخير">⬅️</button>
+                <button onclick="extractSinglePagePDF()" class="px-2 h-7 rounded-lg bg-slate-800 text-[10px] text-sky-300 font-bold" title="استخراج الصفحة">استخراج</button>
+                <button onclick="deleteActivePage()" class="w-7 h-7 rounded-lg bg-rose-950 text-rose-300 text-xs" title="حذف">🗑️</button>
+            </div>
+        </div>
+
+        <!-- Editor Bottom Tools Panel -->
+        <section class="bg-slate-950 border-t border-slate-800 px-2.5 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-white space-y-2 shrink-0">
+            <!-- Primary Tools Scroll Row -->
+            <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 text-[11px] font-bold">
+                <button id="edBtn-pen" onclick="setEditorMode('pen')" class="editor-tool-active px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 shrink-0">
+                    ✒️ التوقيع / قلم
+                </button>
+                <button id="edBtn-highlight" onclick="setEditorMode('highlight')" class="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 shrink-0">
+                    🖍️ تظليل
+                </button>
+                <button id="edBtn-whiteout" onclick="setEditorMode('whiteout')" class="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 shrink-0">
+                    🧹 المحو الذكي
+                </button>
+                <button id="edBtn-crop" onclick="setEditorMode('crop')" class="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 shrink-0">
+                    📐 قص 4 نقاط
+                </button>
+                <button onclick="openEditorTextModal()" class="px-2.5 py-1.5 rounded-xl bg-indigo-600 text-white shrink-0">
+                    🔤 إضافة نص
+                </button>
+                <button onclick="openEditorWatermarkModal()" class="px-2.5 py-1.5 rounded-xl bg-sky-700 text-white shrink-0">
+                    💮 علامة مائية
+                </button>
+                <button onclick="insertOfficialStamp()" class="px-2.5 py-1.5 rounded-xl bg-emerald-700 text-white shrink-0">
+                    ✅ ختم معتمد
+                </button>
+                <button onclick="insertTimestampAnnotation()" class="px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 shrink-0">
+                    🕒 طابع زمني
+                </button>
+                <button onclick="runOcrOnActivePage()" class="px-2.5 py-1.5 rounded-xl bg-teal-700 text-white shrink-0">
+                    🔍 استخراج نص OCR
+                </button>
+                <button onclick="undoEditorAnnotation()" class="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-amber-400 shrink-0">
+                    ↩️ تراجع
+                </button>
+            </div>
+
+            <!-- Secondary Row: Filters OR Crop Apply OR Pen Colors -->
+            <div id="editorSubBar-default" class="flex items-center justify-between gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800 text-[11px]">
+                <div class="flex items-center gap-1.5">
+                    <span class="text-slate-400 text-[10px]">الفلتر:</span>
+                    <button onclick="applyPageFilter('magic')" class="px-2 py-0.5 rounded bg-teal-900/60 text-teal-300 border border-teal-600 font-bold">🪄 سحري</button>
+                    <button onclick="applyPageFilter('bw')" class="px-2 py-0.5 rounded bg-slate-800 text-slate-300">أبيض وأسود</button>
+                    <button onclick="applyPageFilter('original')" class="px-2 py-0.5 rounded bg-slate-800 text-slate-300">الأصلي</button>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <button onclick="setInkColor('#0f766e')" class="w-5 h-5 rounded-full bg-[#0f766e] ring-2 ring-white"></button>
+                    <button onclick="setInkColor('#1d4ed8')" class="w-5 h-5 rounded-full bg-blue-700"></button>
+                    <button onclick="setInkColor('#111827')" class="w-5 h-5 rounded-full bg-black border border-slate-500"></button>
+                    <button onclick="setInkColor('#dc2626')" class="w-5 h-5 rounded-full bg-red-600"></button>
+                </div>
+            </div>
+
+            <!-- Crop Mode SubBar -->
+            <div id="editorSubBar-crop" class="hidden flex items-center justify-between gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800 text-xs">
+                <span class="text-slate-300 text-[11px]">اسحب الزوايا الأربعة لتحديد أطراف المستند:</span>
+                <button onclick="applyPerspectiveCrop()" class="cs-teal-bg text-white px-4 py-1 rounded-lg font-bold">
+                    ✂️ تطبيق القص
+                </button>
+            </div>
+        </section>
+    </div>
+
+    <!-- ===================================================================
+         CUSTOM MODALS (No native alert/prompt used anywhere)
+         =================================================================== -->
+
+    <!-- Input Prompt Modal (Used for Create Folder, Add Text, Watermark, Lock, QR) -->
+    <div id="customPromptModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
+            <h3 id="promptModalTitle" class="font-black text-base text-gray-900">إدخال بيانات</h3>
+            <input id="promptModalInput" type="text"
+                class="w-full bg-gray-100 border border-gray-200 rounded-2xl px-4 py-3 text-xs text-gray-900 focus:outline-none focus:border-teal-500">
+            <div class="flex justify-end gap-2">
+                <button onclick="closeCustomPrompt()" class="px-4 py-2 rounded-xl bg-gray-100 text-gray-600 text-xs font-bold">إلغاء</button>
+                <button id="promptModalConfirmBtn" class="px-5 py-2 rounded-xl cs-teal-bg text-white text-xs font-bold shadow">تأكيد</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- OCR & Translation Modal -->
+    <div id="ocrResultModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-5 space-y-3 shadow-2xl">
+            <div class="flex items-center justify-between">
+                <h3 class="font-black text-sm text-teal-700 flex items-center gap-1.5">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    <span>النص المستخرج (OCR)</span>
+                </h3>
+                <button onclick="document.getElementById('ocrResultModal').classList.add('hidden')" class="text-gray-400 font-bold">✕</button>
+            </div>
+            <textarea id="ocrResultBox" rows="7" class="w-full bg-gray-50 border border-gray-200 rounded-2xl p-3 text-xs text-gray-800 leading-relaxed focus:outline-none"></textarea>
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="copyOcrText()" class="cs-teal-bg text-white py-2.5 rounded-xl text-xs font-bold">📋 نسخ النص</button>
+                <button onclick="exportDocToWord(currentDocIdx)" class="bg-blue-600 text-white py-2.5 rounded-xl text-xs font-bold">W تصدير إلى Word</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div id="confirmModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
+            <h3 id="confirmModalTitle" class="font-black text-sm text-gray-900 leading-relaxed">تأكيد</h3>
+            <div class="flex justify-end gap-2">
+                <button onclick="document.getElementById('confirmModal').classList.add('hidden')" class="px-4 py-2 rounded-xl bg-gray-100 text-gray-600 text-xs font-bold">إلغاء</button>
+                <button id="confirmModalOkBtn" class="px-5 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold shadow">حذف</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- File Ready Modal: iOS needs a fresh tap to open the share sheet -->
+    <div id="fileReadyModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl mb-[var(--sab)]">
+            <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-2xl bg-[#eef8f6] text-[#16a085] flex items-center justify-center text-xl">
+                    <i id="fileReadyIcon" class="fa-solid fa-file-pdf"></i>
+                </div>
+                <div class="min-w-0">
+                    <h3 class="font-black text-sm text-gray-900">الملف جاهز</h3>
+                    <p id="fileReadyName" class="text-[11px] text-gray-400 truncate" dir="ltr"></p>
+                </div>
+            </div>
+            <button id="fileReadyShareBtn" class="w-full py-3 rounded-2xl cs-teal-bg text-white text-sm font-bold shadow flex items-center justify-center gap-2">
+                <i class="fa-solid fa-arrow-up-from-bracket"></i>
+                <span>مشاركة / حفظ في الملفات</span>
+            </button>
+            <button onclick="closeFileReady()" class="w-full py-2.5 rounded-2xl bg-gray-100 text-gray-600 text-xs font-bold">إغلاق</button>
+        </div>
+    </div>
+
+    <!-- Loading Spinner Overlay -->
+    <div id="globalLoader" class="hidden fixed inset-0 bg-slate-950/75 backdrop-blur-sm z-50 flex flex-col items-center justify-center text-white">
+        <div class="w-11 h-11 border-4 border-teal-400 border-t-transparent rounded-full animate-spin mb-3"></div>
+        <p id="globalLoaderText" class="text-xs font-bold">جاري المعالجة...</p>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toastBanner" class="toast-safe fixed top-12 left-1/2 -translate-x-1/2 bg-slate-900/95 text-white px-4 py-2 rounded-full shadow-xl text-xs font-bold z-50 transition-all duration-300 opacity-0 pointer-events-none">
+        تم بنجاح
+    </div>
+
+    <!-- ===================================================================
+         APPLICATION ENGINE (JavaScript)
+         =================================================================== -->
+    <script>
+        if (window.pdfjsLib) {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
+        }
+
+        // State
+        let docs = [];
+        let currentDocIdx = 0;
+        let currentPageIdx = 0;
+        let editorMode = 'pen'; // 'pen' | 'highlight' | 'whiteout' | 'crop'
+        let inkColor = '#0f766e';
+        let editorOpen = false;
+        const unlockedThisSession = new Set();
+
+        // Canvas interaction state
+        const edCanvas = document.getElementById('editorCanvas');
+        const edCtx = edCanvas.getContext('2d');
+        const loupeEl = document.getElementById('editorLoupe');
+        const loupeCanvas = document.getElementById('loupeCanvas');
+        const loupeCtx = loupeCanvas.getContext('2d');
+
+        let isDrawing = false;
+        let activeStroke = null;
+        let draggingCorner = -1;
+        let draggingAnnIdx = -1;
+        let selectedAnnIdx = -1;
+
+        // ===================================================================
+        // ON-DEVICE STORAGE (IndexedDB) — documents survive closing the app
+        // ===================================================================
+        const DB_NAME = 'salha-scan';
+        const DB_VERSION = 1;
+        let dbPromise = null;
+
+        function openDB() {
+            if (dbPromise) return dbPromise;
+            dbPromise = new Promise((resolve, reject) => {
+                const req = indexedDB.open(DB_NAME, DB_VERSION);
+                req.onupgradeneeded = () => {
+                    const db = req.result;
+                    if (!db.objectStoreNames.contains('docs')) db.createObjectStore('docs', { keyPath: 'id' });
+                    if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta');
+                };
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+            return dbPromise;
+        }
+
+        function idbReq(storeName, mode, fn) {
+            return openDB().then(db => new Promise((resolve, reject) => {
+                const tx = db.transaction(storeName, mode);
+                const store = tx.objectStore(storeName);
+                let result;
+                const r = fn(store);
+                if (r && 'onsuccess' in r) r.onsuccess = () => { result = r.result; };
+                tx.oncomplete = () => resolve(result);
+                tx.onerror = () => reject(tx.error);
+                tx.onabort = () => reject(tx.error);
+            }));
+        }
+
+        function canvasToBlob(canvas, type = 'image/jpeg', quality = 0.92) {
+            return new Promise(res => canvas.toBlob(b => res(b), type, quality));
+        }
+
+        async function blobToCanvas(blob) {
+            let src;
+            if (window.createImageBitmap) {
+                try { src = await createImageBitmap(blob); } catch (e) { src = null; }
+            }
+            if (!src) {
+                src = await new Promise((res, rej) => {
+                    const img = new Image();
+                    img.onload = () => res(img);
+                    img.onerror = rej;
+                    img.src = URL.createObjectURL(blob);
+                });
+            }
+            const c = document.createElement('canvas');
+            c.width = src.width;
+            c.height = src.height;
+            c.getContext('2d').drawImage(src, 0, 0);
+            if (src.close) src.close();
+            return c;
+        }
+
+        // Make sure every page of a document has its canvases in memory
+        async function hydrateDoc(doc) {
+            for (const page of doc.pages) {
+                if (!page.rawCanvas && page.rawBlob) {
+                    page.rawCanvas = await blobToCanvas(page.rawBlob);
+                    page.rawBlobFor = page.rawCanvas;
+                }
+                if (!page.baseCanvas && page.baseBlob) {
+                    page.baseCanvas = await blobToCanvas(page.baseBlob);
+                    page.baseBlobFor = page.baseCanvas;
+                }
+            }
+        }
+
+        // Free canvas memory (iPhone has a strict canvas memory limit)
+        function releaseDoc(doc) {
+            if (!doc) return;
+            for (const page of doc.pages) {
+                if (page.rawBlob && page.rawBlobFor === page.rawCanvas && page.rawCanvas) {
+                    page.rawCanvas.width = page.rawCanvas.height = 0;
+                    page.rawCanvas = null;
+                    page.rawBlobFor = null;
+                }
+                if (page.baseBlob && page.baseBlobFor === page.baseCanvas && page.baseCanvas) {
+                    page.baseCanvas.width = page.baseCanvas.height = 0;
+                    page.baseCanvas = null;
+                    page.baseBlobFor = null;
+                }
+            }
+        }
+
+        async function makeThumbBlob(doc) {
+            const page = doc.pages[0];
+            if (!page || !page.baseCanvas) return doc.thumbBlob || null;
+            const full = document.createElement('canvas');
+            renderPageCompositeToCanvas(page, full, false);
+            const scale = Math.min(1, 220 / Math.max(full.width, full.height));
+            const t = document.createElement('canvas');
+            t.width = Math.max(1, Math.round(full.width * scale));
+            t.height = Math.max(1, Math.round(full.height * scale));
+            t.getContext('2d').drawImage(full, 0, 0, t.width, t.height);
+            full.width = full.height = 0;
+            return canvasToBlob(t, 'image/jpeg', 0.7);
+        }
+
+        function setThumb(doc, blob) {
+            if (doc.thumbUrl) URL.revokeObjectURL(doc.thumbUrl);
+            doc.thumbBlob = blob;
+            doc.thumbUrl = blob ? URL.createObjectURL(blob) : '';
+        }
+
+        async function persistDoc(doc) {
+            const pages = [];
+            for (const page of doc.pages) {
+                if (page.rawCanvas && page.rawBlobFor !== page.rawCanvas) {
+                    page.rawBlob = await canvasToBlob(page.rawCanvas);
+                    page.rawBlobFor = page.rawCanvas;
+                }
+                if (page.baseCanvas && page.baseBlobFor !== page.baseCanvas) {
+                    page.baseBlob = page.baseCanvas === page.rawCanvas ? page.rawBlob : await canvasToBlob(page.baseCanvas);
+                    page.baseBlobFor = page.baseCanvas;
+                }
+                pages.push({
+                    rawBlob: page.rawBlob,
+                    baseBlob: page.baseBlob,
+                    filter: page.filter,
+                    watermark: page.watermark,
+                    annotations: page.annotations,
+                    cropCorners: page.cropCorners
+                });
+            }
+            if (doc.pages[0] && doc.pages[0].baseCanvas) setThumb(doc, await makeThumbBlob(doc));
+            await idbReq('docs', 'readwrite', s => s.put({
+                id: doc.id,
+                title: doc.title,
+                date: doc.date,
+                signed: doc.signed,
+                locked: doc.locked,
+                password: doc.password,
+                thumbBlob: doc.thumbBlob || null,
+                pages
+            }));
+        }
+
+        async function persistMeta() {
+            await idbReq('meta', 'readwrite', s => s.put({
+                order: docs.map(d => d.id),
+                folders: customFolders
+            }, 'state'));
+        }
+
+        // Debounced saving so drawing stays smooth
+        const dirtyDocs = new Set();
+        let saveTimer = null;
+        let saveChain = Promise.resolve();
+        function markDirty(doc) {
+            if (doc) dirtyDocs.add(doc);
+            if (saveTimer) clearTimeout(saveTimer);
+            saveTimer = setTimeout(flushSaves, 700);
+        }
+        function flushSaves() {
+            if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+            const batch = Array.from(dirtyDocs);
+            dirtyDocs.clear();
+            saveChain = saveChain.then(async () => {
+                try {
+                    for (const d of batch) if (docs.includes(d)) await persistDoc(d);
+                    await persistMeta();
+                    updateStorageInfo();
+                } catch (e) {
+                    console.error(e);
+                    showToast('تعذر الحفظ — قد تكون مساحة الجهاز ممتلئة');
+                }
+            });
+            return saveChain;
+        }
+
+        async function deleteDocFromDB(id) {
+            await idbReq('docs', 'readwrite', s => s.delete(id));
+            await persistMeta();
+            updateStorageInfo();
+        }
+
+        async function loadAllFromDB() {
+            const [records, state] = await Promise.all([
+                idbReq('docs', 'readonly', s => s.getAll()),
+                idbReq('meta', 'readonly', s => s.get('state'))
+            ]);
+            const byId = new Map((records || []).map(r => [r.id, r]));
+            const order = (state && state.order) || [];
+            const ordered = order.filter(id => byId.has(id)).map(id => byId.get(id));
+            (records || []).forEach(r => { if (!order.includes(r.id)) ordered.unshift(r); });
+            customFolders = (state && state.folders) || [];
+
+            docs = ordered.map(r => {
+                const doc = {
+                    id: r.id,
+                    title: r.title,
+                    date: r.date,
+                    signed: !!r.signed,
+                    locked: !!r.locked,
+                    password: r.password || '',
+                    thumbBlob: null,
+                    thumbUrl: '',
+                    pages: r.pages.map(p => ({
+                        rawCanvas: null, baseCanvas: null,
+                        rawBlob: p.rawBlob, baseBlob: p.baseBlob,
+                        rawBlobFor: null, baseBlobFor: null,
+                        filter: p.filter || 'original',
+                        watermark: p.watermark || '',
+                        annotations: p.annotations || [],
+                        cropCorners: p.cropCorners || defaultCorners()
+                    }))
+                };
+                if (r.thumbBlob) setThumb(doc, r.thumbBlob);
+                return doc;
+            });
+        }
+
+        async function updateStorageInfo() {
+            let used = 0, quota = 0;
+            try {
+                if (navigator.storage && navigator.storage.estimate) {
+                    const est = await navigator.storage.estimate();
+                    used = est.usage || 0;
+                    quota = est.quota || 0;
+                }
+            } catch (e) { }
+            const fmt = b => b >= 1073741824 ? (b / 1073741824).toFixed(2) + ' GB' : (b / 1048576).toFixed(1) + ' MB';
+            const label = quota ? `${fmt(used)} / ${fmt(quota)}` : fmt(used);
+            const pct = quota ? Math.min(100, Math.max(1, used / quota * 100)) : 0;
+            document.querySelectorAll('.storage-label').forEach(el => el.textContent = label);
+            document.querySelectorAll('.storage-bar').forEach(el => el.style.width = pct + '%');
+        }
+
+        function defaultCorners() {
+            return [
+                { x: 0.06, y: 0.06 },
+                { x: 0.94, y: 0.06 },
+                { x: 0.94, y: 0.94 },
+                { x: 0.06, y: 0.94 }
+            ];
+        }
+
+        function nowStamp() {
+            const now = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            const d = `${pad(now.getDate())}.${pad(now.getMonth() + 1)}.${String(now.getFullYear()).slice(-2)}`;
+            const t = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+            return { d, t, title: `Scan ${pad(now.getHours())}.${pad(now.getMinutes())} ${d}`, date: `${d} ${t}` };
+        }
+
+        let customFolders = [];
+
+        async function initApp() {
+            setupFileInputHandlers();
+            setupEditorTouchEvents();
+            try {
+                await loadAllFromDB();
+            } catch (e) {
+                console.error(e);
+                showToast('تعذر فتح ذاكرة التطبيق');
+            }
+            customFolders.forEach(name => renderFolderTile(name));
+            renderAllDocLists();
+            updateStorageInfo();
+
+            // Ask iOS to keep our data (reduces the chance it gets evicted)
+            try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { }
+
+            const standalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+            if (!standalone) document.getElementById('installHint').classList.remove('hidden');
+
+            // Save immediately when the app goes to the background
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'hidden') {
+                    if (editorOpen && docs[currentDocIdx]) {
+                        docs[currentDocIdx].title = document.getElementById('editorTitleInput').value.trim() || docs[currentDocIdx].title;
+                        dirtyDocs.add(docs[currentDocIdx]);
+                    }
+                    flushSaves();
+                }
+            });
+        }
+
+        function cloneCanvas(src) {
+            const c = document.createElement('canvas');
+            c.width = src.width;
+            c.height = src.height;
+            c.getContext('2d').drawImage(src, 0, 0);
+            return c;
+        }
+
+        function emptyStateHtml() {
+            return `
+                <div class="py-10 text-center text-gray-400">
+                    <div class="w-16 h-16 mx-auto rounded-full bg-[#eef8f6] text-[#16a085] flex items-center justify-center text-2xl mb-3">
+                        <i class="fa-solid fa-camera"></i>
+                    </div>
+                    <p class="text-sm font-bold text-gray-600">لا توجد مستندات بعد</p>
+                    <p class="text-xs mt-1">اضغط زر الكاميرا لمسح أول مستند، أو استورد صورة أو ملف PDF</p>
+                </div>`;
+        }
+
+        // Render Documents in Home Screen (Screenshot 1) and All Docs Screen (Screenshot 5)
+        function renderAllDocLists(filterQuery = '', onlySigned = false) {
+            const homeContainer = document.getElementById('homeRecentDocsList');
+            const allContainer = document.getElementById('allDocsFullList');
+            homeContainer.innerHTML = '';
+            allContainer.innerHTML = '';
+
+            const filtered = docs.filter(d => {
+                const matchQ = d.title.toLowerCase().includes(filterQuery.toLowerCase());
+                const matchS = !onlySigned || d.signed;
+                return matchQ && matchS;
+            });
+
+            document.getElementById('allDocsCounterLabel').textContent = `(${filtered.length})`;
+
+            if (!filtered.length) {
+                homeContainer.innerHTML = emptyStateHtml();
+                allContainer.innerHTML = docs.length ? '<div class="py-6 text-center text-xs text-gray-400">لا توجد نتائج</div>' : emptyStateHtml();
+                return;
+            }
+
+            filtered.forEach((doc, idx) => {
+                const realDocIdx = docs.indexOf(doc);
+                const thumbDataUrl = doc.thumbUrl || 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
+                const safeTitle = escapeHtml(doc.title);
+
+                // 1. Home Screen Item
+                const homeItem = document.createElement('div');
+                homeItem.className = 'py-3.5 first:pt-1';
+                homeItem.innerHTML = `
+                    <div class="flex items-center justify-between gap-3 cursor-pointer" onclick="openDocEditor(${realDocIdx})">
+                        <!-- Right side in RTL: Document Thumbnail -->
+                        <div class="w-16 h-20 rounded-xl border border-gray-200 bg-white p-1 shadow-sm shrink-0 overflow-hidden">
+                            <img src="${thumbDataUrl}" alt="thumb" class="w-full h-full object-cover rounded">
+                        </div>
+
+                        <!-- Center: Title & Date -->
+                        <div class="flex-1 min-w-0 text-center" dir="ltr">
+                            <div class="font-extrabold text-[15px] text-gray-900 truncate">${doc.locked ? '🔒 ' : ''}${safeTitle}</div>
+                            <div class="text-xs text-gray-400 mt-1 flex items-center justify-center gap-2">
+                                <span>${doc.pages.length} <i class="fa-regular fa-clone text-[11px]"></i></span>
+                                <span class="text-gray-300">|</span>
+                                <span>${doc.date}</span>
+                            </div>
+                        </div>
+
+                        <!-- Left side in RTL: Selection Checkbox -->
+                        <input type="checkbox" onclick="event.stopPropagation()" class="w-5 h-5 rounded border-gray-300 accent-[#16a085] shrink-0">
+                    </div>
+
+                    ${idx === 0 ? `
+                    <!-- Action Buttons Row under the 1st Document (Matches Screenshot 1) -->
+                    <div class="grid grid-cols-3 gap-2.5 mt-3">
+                        <button onclick="exportCurrentDocToPDF(${realDocIdx})" class="bg-[#f7f8fa] active:bg-gray-200 py-2.5 rounded-xl text-xs font-bold text-gray-800">
+                            مشاركة
+                        </button>
+                        <button onclick="exportDocToWord(${realDocIdx})" class="bg-[#f7f8fa] active:bg-gray-200 py-2.5 rounded-xl text-xs font-bold text-gray-900 flex items-center justify-center gap-1" dir="ltr">
+                            <i class="fa-solid fa-wand-magic-sparkles text-[#16a085]"></i>
+                            <span>To Word</span>
+                        </button>
+                        <button onclick="openDocEditor(${realDocIdx})" class="bg-[#f7f8fa] active:bg-gray-200 py-2.5 rounded-xl text-xs font-bold text-gray-800">
+                            عرض
+                        </button>
+                    </div>
+                    ` : ''}
+                `;
+                homeContainer.appendChild(homeItem);
+
+                // 2. All Documents Screen Item (Screenshot 5)
+                const allItem = document.createElement('div');
+                allItem.className = 'py-3.5 flex items-center justify-between gap-3 cursor-pointer';
+                allItem.onclick = () => openDocEditor(realDocIdx);
+                allItem.innerHTML = `
+                    <div class="w-16 h-20 rounded-xl border border-gray-200 bg-white p-1 shadow-sm shrink-0 overflow-hidden">
+                        <img src="${thumbDataUrl}" alt="thumb" class="w-full h-full object-cover rounded">
+                    </div>
+                    <div class="flex-1 min-w-0 text-center" dir="ltr">
+                        <div class="font-extrabold text-[15px] text-gray-900 truncate">${doc.locked ? '🔒 ' : ''}${safeTitle}</div>
+                        <div class="text-xs text-gray-400 mt-1 flex items-center justify-center gap-2">
+                            <span>${doc.pages.length} <i class="fa-regular fa-clone text-[11px]"></i></span>
+                            <span class="text-gray-300">|</span>
+                            <span>${doc.date}</span>
+                        </div>
+                    </div>
+                    <input type="checkbox" onclick="event.stopPropagation()" class="w-5 h-5 rounded border-gray-300 accent-[#16a085] shrink-0">
+                `;
+                allContainer.appendChild(allItem);
+            });
+        }
+
+        // Bottom Navigation Bar Tab Switching
+        function switchMainTab(tabName) {
+            ['home', 'docs', 'tools', 'me'].forEach(t => {
+                document.getElementById(`screen-${t}`).classList.toggle('hidden', t !== tabName);
+                const btn = document.getElementById(`bottomTab-${t}`);
+                if (t === tabName) {
+                    btn.classList.add('nav-tab-active');
+                } else {
+                    btn.classList.remove('nav-tab-active');
+                }
+            });
+            document.getElementById('mainViewport').scrollTop = 0;
+        }
+
+        function handleSearchDocs(q) {
+            renderAllDocLists(q, false);
+        }
+
+        function filterSignedDocsOnly() {
+            renderAllDocLists('', true);
+            showToast('عرض المستندات الموقّعة فقط');
+        }
+
+        function resetDocFilter() {
+            renderAllDocLists('', false);
+            showToast('عرض كل المستندات');
+        }
+
+        function reverseDocsList() {
+            docs.reverse();
+            markDirty(null);
+            renderAllDocLists();
+            showToast('تم عكس ترتيب المستندات');
+        }
+
+        // File & Camera Import Handlers
+        function openCameraScanner() {
+            document.getElementById('cameraCaptureInput').click();
+        }
+
+        function setupFileInputHandlers() {
+            const pdfInput = document.getElementById('importPdfInput');
+            const imgInput = document.getElementById('importImageInput');
+            const camInput = document.getElementById('cameraCaptureInput');
+            const mergeInput = document.getElementById('mergeFilesInput');
+
+            const processFiles = async (fileList, mergeMode = false) => {
+                const files = Array.from(fileList || []);
+                if (!files.length) return;
+                showLoader('جاري استيراد ومعالجة الصفحات...');
+
+                const importedPages = [];
+                try {
+                    for (const file of files) {
+                        if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+                            const arrayBuf = await file.arrayBuffer();
+                            const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise;
+                            for (let p = 1; p <= pdf.numPages; p++) {
+                                showLoader(`جاري استيراد صفحة PDF (${p} من ${pdf.numPages})...`);
+                                const page = await pdf.getPage(p);
+                                const vp = page.getViewport({ scale: 1.75 });
+                                const c = document.createElement('canvas');
+                                c.width = vp.width;
+                                c.height = vp.height;
+                                const ctx = c.getContext('2d');
+                                ctx.fillStyle = '#ffffff';
+                                ctx.fillRect(0, 0, c.width, c.height);
+                                await page.render({ canvasContext: ctx, viewport: vp }).promise;
+                                importedPages.push(createPageObj(c, 'original'));
+                            }
+                        } else if (file.type.startsWith('image/')) {
+                            const img = await loadImageFile(file);
+                            const maxDim = 1350;
+                            const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+                            const c = document.createElement('canvas');
+                            c.width = Math.round(img.width * scale);
+                            c.height = Math.round(img.height * scale);
+                            c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+                            importedPages.push(createPageObj(c, 'magic'));
+                        }
+                    }
+
+                    if (importedPages.length) {
+                        if (mergeMode && editorOpen && docs[currentDocIdx]) {
+                            const doc = docs[currentDocIdx];
+                            await hydrateDoc(doc);
+                            doc.pages.push(...importedPages);
+                            currentPageIdx = doc.pages.length - 1;
+                            selectedAnnIdx = -1;
+                            renderEditorCanvas();
+                            markDirty(doc);
+                            showToast(`تم دمج ${importedPages.length} صفحات في المستند`);
+                        } else {
+                            const stamp = nowStamp();
+                            // iPhone camera photos are always called "image.jpg" — use a dated name instead
+                            const rawName = files[0].name ? files[0].name.replace(/\.[^/.]+$/, '') : '';
+                            const title = rawName && !/^image$/i.test(rawName) ? rawName : stamp.title;
+                            if (editorOpen) await closeDocEditor();
+                            docs.unshift({
+                                id: Date.now(),
+                                title: title,
+                                date: stamp.date,
+                                signed: false,
+                                locked: false,
+                                password: '',
+                                thumbBlob: null,
+                                thumbUrl: '',
+                                pages: importedPages
+                            });
+                            await openDocEditor(0);
+                            markDirty(docs[0]);
+                            await flushSaves();
+                            renderAllDocLists();
+                            showToast('تم حفظ المستند وفتحه في المحرر');
+                        }
+                    }
+                } catch (e) {
+                    console.error(e);
+                    showToast('تعذر قراءة الملف، يرجى المحاولة مرة أخرى');
+                }
+                hideLoader();
+            };
+
+            pdfInput.addEventListener('change', e => { processFiles(e.target.files, false); pdfInput.value = ''; });
+            imgInput.addEventListener('change', e => { processFiles(e.target.files, false); imgInput.value = ''; });
+            camInput.addEventListener('change', e => { processFiles(e.target.files, false); camInput.value = ''; });
+            mergeInput.addEventListener('change', e => { processFiles(e.target.files, true); mergeInput.value = ''; });
+        }
+
+        function createPageObj(canvas, defaultFilter) {
+            return {
+                rawCanvas: cloneCanvas(canvas),
+                baseCanvas: canvas,
+                filter: defaultFilter,
+                watermark: '',
+                annotations: [],
+                cropCorners: defaultCorners(),
+                rawBlob: null, baseBlob: null,
+                rawBlobFor: null, baseBlobFor: null
+            };
+        }
+
+        function loadImageFile(file) {
+            return new Promise((res, rej) => {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    const img = new Image();
+                    img.onload = () => res(img);
+                    img.onerror = rej;
+                    img.src = e.target.result;
+                };
+                reader.onerror = rej;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // ===================================================================
+        // INTERACTIVE PDF & DOCUMENT EDITOR FUNCTIONS
+        // ===================================================================
+        async function openDocEditor(docIndex) {
+            const doc = docs[docIndex];
+            if (!doc) return false;
+
+            if (doc.locked && !unlockedThisSession.has(doc.id)) {
+                return new Promise(resolve => {
+                    openCustomPrompt('أدخل كلمة المرور لفتح المستند المحمي:', '', async (val) => {
+                        if (val === doc.password) {
+                            unlockedThisSession.add(doc.id);
+                            resolve(await openDocEditor(docIndex));
+                        } else {
+                            showToast('كلمة المرور غير صحيحة!');
+                            resolve(false);
+                        }
+                    }, true);
+                });
+            }
+
+            if (editorOpen && docs[currentDocIdx] !== doc) await closeDocEditor();
+            showLoader('جاري فتح المستند...');
+            try {
+                await hydrateDoc(doc);
+            } finally {
+                hideLoader();
+            }
+            currentDocIdx = docs.indexOf(doc);
+            currentPageIdx = 0;
+            selectedAnnIdx = -1;
+            editorOpen = true;
+            document.getElementById('editorTitleInput').value = doc.title;
+            document.getElementById('docEditorModal').classList.remove('hidden');
+            setEditorMode('pen');
+            renderEditorCanvas();
+            return true;
+        }
+
+        async function closeDocEditor() {
+            const doc = docs[currentDocIdx];
+            document.getElementById('docEditorModal').classList.add('hidden');
+            editorOpen = false;
+            if (doc) {
+                doc.title = document.getElementById('editorTitleInput').value.trim() || doc.title;
+                markDirty(doc);
+                await flushSaves();
+                releaseDoc(doc);
+            }
+            renderAllDocLists();
+        }
+
+        // Runs fn with the document's pages loaded, then frees memory again
+        async function withDoc(docIdx, fn) {
+            const doc = docs[docIdx];
+            if (!doc) {
+                showToast('لا يوجد مستند بعد — امسح أو استورد مستنداً أولاً');
+                return;
+            }
+            const keep = editorOpen && docs[currentDocIdx] === doc;
+            await hydrateDoc(doc);
+            try {
+                return await fn(doc);
+            } finally {
+                if (!keep) releaseDoc(doc);
+            }
+        }
+
+        async function openDocWithTool(docIdx, toolName) {
+            if (!docs[docIdx]) {
+                showToast('امسح أو استورد مستنداً أولاً');
+                openCameraScanner();
+                return;
+            }
+            if (!(await openDocEditor(docIdx))) return;
+            setTimeout(() => {
+                if (toolName === 'sign') setEditorMode('pen');
+                else if (toolName === 'whiteout') setEditorMode('whiteout');
+                else if (toolName === 'watermark') openEditorWatermarkModal();
+                else if (toolName === 'timestamp') insertTimestampAnnotation();
+                else if (toolName === 'magic') applyPageFilter('magic');
+                else if (toolName === 'ocr' || toolName === 'translate') runOcrOnActivePage();
+                else if (toolName === 'extractPages') extractSinglePagePDF();
+                else if (toolName === 'reorder') showToast('استخدم أزرار الأسهم ⬅️ ➡️ بالأسفل لإعادة ترتيب الصفحات');
+            }, 150);
+        }
+
+        function setEditorMode(mode) {
+            editorMode = mode;
+            ['pen', 'highlight', 'whiteout', 'crop'].forEach(m => {
+                const btn = document.getElementById(`edBtn-${m}`);
+                if (btn) {
+                    if (m === mode) btn.classList.add('editor-tool-active');
+                    else btn.classList.remove('editor-tool-active');
+                }
+            });
+            document.getElementById('editorSubBar-default').classList.toggle('hidden', mode === 'crop');
+            document.getElementById('editorSubBar-crop').classList.toggle('hidden', mode !== 'crop');
+            loupeEl.classList.add('hidden');
+            renderEditorCanvas();
+        }
+
+        function setInkColor(c) {
+            inkColor = c;
+            if (editorMode === 'whiteout' || editorMode === 'crop') setEditorMode('pen');
+            showToast('تم تغيير لون القلم والتوقيع');
+        }
+
+        function applyPageFilter(filterType) {
+            const page = docs[currentDocIdx].pages[currentPageIdx];
+            page.filter = filterType;
+            renderEditorCanvas();
+            showToast('تم تطبيق الفلتر على الصفحة');
+        }
+
+        function renderPageCompositeToCanvas(page, targetCanvas, showSelectionBox = false) {
+            const w = page.baseCanvas.width;
+            const h = page.baseCanvas.height;
+            targetCanvas.width = w;
+            targetCanvas.height = h;
+            const ctx = targetCanvas.getContext('2d');
+
+            ctx.drawImage(page.baseCanvas, 0, 0);
+
+            // Apply Filter
+            if (page.filter !== 'original') {
+                const imgData = ctx.getImageData(0, 0, w, h);
+                const d = imgData.data;
+                for (let i = 0; i < d.length; i += 4) {
+                    if (page.filter === 'magic') {
+                        d[i] = Math.min(255, Math.max(0, (d[i] - 128) * 1.28 + 142));
+                        d[i + 1] = Math.min(255, Math.max(0, (d[i + 1] - 128) * 1.28 + 142));
+                        d[i + 2] = Math.min(255, Math.max(0, (d[i + 2] - 128) * 1.28 + 142));
+                    } else if (page.filter === 'bw') {
+                        const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+                        const v = lum > 152 ? 255 : 0;
+                        d[i] = d[i + 1] = d[i + 2] = v;
+                    }
+                }
+                ctx.putImageData(imgData, 0, 0);
+            }
+
+            // Draw Diagonal Watermark if present
+            if (page.watermark) {
+                ctx.save();
+                ctx.translate(w / 2, h / 2);
+                ctx.rotate(-Math.PI / 6);
+                ctx.font = 'bold 42px Cairo, sans-serif';
+                ctx.fillStyle = 'rgba(22, 160, 133, 0.18)';
+                ctx.textAlign = 'center';
+                ctx.fillText(page.watermark, 0, -90);
+                ctx.fillText(page.watermark, 0, 90);
+                ctx.restore();
+            }
+
+            // Draw Annotations (Strokes, Draggable Text, Stamps)
+            page.annotations.forEach((ann, idx) => {
+                ctx.save();
+                if (ann.type === 'stroke') {
+                    ctx.beginPath();
+                    ctx.strokeStyle = ann.color;
+                    ctx.lineWidth = ann.size;
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                    ctx.globalAlpha = ann.alpha || 1;
+                    ann.points.forEach((pt, i) => {
+                        if (i === 0) ctx.moveTo(pt.x * w, pt.y * h);
+                        else ctx.lineTo(pt.x * w, pt.y * h);
+                    });
+                    ctx.stroke();
+                } else if (ann.type === 'text' || ann.type === 'stamp') {
+                    const tx = ann.x * w;
+                    const ty = ann.y * h;
+                    ctx.font = `bold ${ann.size}px Cairo, sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+
+                    if (ann.type === 'stamp') {
+                        const tw = Math.max(170, ctx.measureText(ann.text).width + 34);
+                        const th = ann.size * 2;
+                        ctx.strokeStyle = ann.color;
+                        ctx.lineWidth = 3.5;
+                        ctx.strokeRect(tx - tw / 2, ty - th / 2, tw, th);
+                    }
+
+                    ctx.fillStyle = ann.color;
+                    ctx.fillText(ann.text, tx, ty);
+
+                    if (showSelectionBox && idx === selectedAnnIdx) {
+                        const bw = Math.max(120, ctx.measureText(ann.text).width + 36);
+                        const bh = ann.size * 2.1;
+                        ctx.strokeStyle = '#16a085';
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([5, 4]);
+                        ctx.strokeRect(tx - bw / 2, ty - bh / 2, bw, bh);
+                    }
+                }
+                ctx.restore();
+            });
+        }
+
+        function renderEditorCanvas() {
+            const doc = docs[currentDocIdx];
+            if (!doc) return;
+            const page = doc.pages[currentPageIdx];
+
+            if (editorMode === 'crop') {
+                const raw = page.rawCanvas;
+                edCanvas.width = raw.width;
+                edCanvas.height = raw.height;
+                edCtx.drawImage(raw, 0, 0);
+
+                const W = edCanvas.width, H = edCanvas.height;
+                const pts = page.cropCorners.map(c => ({ x: c.x * W, y: c.y * H }));
+
+                edCtx.save();
+                edCtx.strokeStyle = '#16a085';
+                edCtx.lineWidth = 4;
+                edCtx.beginPath();
+                pts.forEach((p, i) => { if (i === 0) edCtx.moveTo(p.x, p.y); else edCtx.lineTo(p.x, p.y); });
+                edCtx.closePath();
+                edCtx.stroke();
+
+                pts.forEach(p => {
+                    edCtx.beginPath();
+                    edCtx.arc(p.x, p.y, 16, 0, Math.PI * 2);
+                    edCtx.fillStyle = '#16a085';
+                    edCtx.fill();
+                    edCtx.lineWidth = 3;
+                    edCtx.strokeStyle = '#ffffff';
+                    edCtx.stroke();
+                });
+                edCtx.restore();
+            } else {
+                renderPageCompositeToCanvas(page, edCanvas, true);
+            }
+
+            // Update Page Pills
+            document.getElementById('editorPageIndicator').textContent = `صفحة ${currentPageIdx + 1} من ${doc.pages.length}`;
+            const pills = document.getElementById('editorPagePills');
+            pills.innerHTML = '';
+            doc.pages.forEach((p, idx) => {
+                const b = document.createElement('button');
+                b.className = `px-2.5 py-1 rounded-lg text-[10px] font-bold shrink-0 ${idx === currentPageIdx ? 'cs-teal-bg text-white' : 'bg-slate-800 text-slate-400'}`;
+                b.textContent = `ص ${idx + 1}`;
+                b.onclick = () => { currentPageIdx = idx; selectedAnnIdx = -1; renderEditorCanvas(); };
+                pills.appendChild(b);
+            });
+
+            document.getElementById('selectedAnnotationBar').classList.toggle('hidden', selectedAnnIdx === -1);
+            if (editorOpen) markDirty(doc);
+        }
+
+        function setupEditorTouchEvents() {
+            const getPos = (e) => {
+                const r = edCanvas.getBoundingClientRect();
+                const t = (e.touches && e.touches.length) ? e.touches[0] : e;
+                return {
+                    x: Math.max(0, Math.min(1, (t.clientX - r.left) / r.width)),
+                    y: Math.max(0, Math.min(1, (t.clientY - r.top) / r.height))
+                };
+            };
+
+            const onDown = (e) => {
+                const doc = docs[currentDocIdx];
+                if (!doc) return;
+                const page = doc.pages[currentPageIdx];
+                const pos = getPos(e);
+
+                if (editorMode === 'crop') {
+                    draggingCorner = page.cropCorners.findIndex(c => Math.hypot(c.x - pos.x, c.y - pos.y) < 0.1);
+                    if (draggingCorner !== -1) e.preventDefault();
+                    return;
+                }
+
+                // Check draggable text/stamp first
+                for (let i = page.annotations.length - 1; i >= 0; i--) {
+                    const a = page.annotations[i];
+                    if ((a.type === 'text' || a.type === 'stamp') && Math.hypot(a.x - pos.x, a.y - pos.y) < 0.1) {
+                        selectedAnnIdx = i;
+                        draggingAnnIdx = i;
+                        e.preventDefault();
+                        renderEditorCanvas();
+                        return;
+                    }
+                }
+
+                selectedAnnIdx = -1;
+                isDrawing = true;
+                e.preventDefault();
+
+                let color = inkColor;
+                let size = 4.5;
+                let alpha = 1;
+                if (editorMode === 'highlight') {
+                    color = '#facc15';
+                    size = 22;
+                    alpha = 0.36;
+                } else if (editorMode === 'whiteout') {
+                    color = '#ffffff';
+                    size = 24;
+                    alpha = 1;
+                } else {
+                    doc.signed = true;
+                }
+
+                activeStroke = { type: 'stroke', color, size, alpha, points: [pos] };
+                page.annotations.push(activeStroke);
+                renderEditorCanvas();
+            };
+
+            const onMove = (e) => {
+                const doc = docs[currentDocIdx];
+                if (!doc) return;
+                const page = doc.pages[currentPageIdx];
+
+                if (editorMode === 'crop' && draggingCorner !== -1) {
+                    e.preventDefault();
+                    const pos = getPos(e);
+                    page.cropCorners[draggingCorner] = pos;
+
+                    // Update Loupe
+                    loupeEl.classList.remove('hidden');
+                    const sx = pos.x * page.rawCanvas.width;
+                    const sy = pos.y * page.rawCanvas.height;
+                    loupeCtx.fillStyle = '#000';
+                    loupeCtx.fillRect(0, 0, 96, 96);
+                    loupeCtx.drawImage(page.rawCanvas, sx - 36, sy - 36, 72, 72, 0, 0, 96, 96);
+                    renderEditorCanvas();
+                    return;
+                }
+
+                if (draggingAnnIdx !== -1) {
+                    e.preventDefault();
+                    const pos = getPos(e);
+                    page.annotations[draggingAnnIdx].x = pos.x;
+                    page.annotations[draggingAnnIdx].y = pos.y;
+                    renderEditorCanvas();
+                } else if (isDrawing && activeStroke) {
+                    e.preventDefault();
+                    activeStroke.points.push(getPos(e));
+                    renderEditorCanvas();
+                }
+            };
+
+            const onUp = () => {
+                draggingCorner = -1;
+                draggingAnnIdx = -1;
+                isDrawing = false;
+                activeStroke = null;
+                loupeEl.classList.add('hidden');
+            };
+
+            edCanvas.addEventListener('mousedown', onDown);
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onUp);
+
+            edCanvas.addEventListener('touchstart', onDown, { passive: false });
+            window.addEventListener('touchmove', onMove, { passive: false });
+            window.addEventListener('touchend', onUp);
+        }
+
+        function applyPerspectiveCrop() {
+            const page = docs[currentDocIdx].pages[currentPageIdx];
+            const raw = page.rawCanvas;
+            const xs = page.cropCorners.map(p => p.x * raw.width);
+            const ys = page.cropCorners.map(p => p.y * raw.height);
+            const minX = Math.max(0, Math.min(...xs));
+            const maxX = Math.min(raw.width, Math.max(...xs));
+            const minY = Math.max(0, Math.min(...ys));
+            const maxY = Math.min(raw.height, Math.max(...ys));
+
+            const cw = Math.max(120, maxX - minX);
+            const ch = Math.max(120, maxY - minY);
+            const out = document.createElement('canvas');
+            out.width = cw;
+            out.height = ch;
+            out.getContext('2d').drawImage(raw, minX, minY, cw, ch, 0, 0, cw, ch);
+            page.baseCanvas = out;
+            setEditorMode('pen');
+            showToast('تم قص وتسطيح المستند بنجاح');
+        }
+
+        function openEditorTextModal() {
+            openCustomPrompt('أدخل النص المراد إضافته على صفحة الـ PDF:', '', (txt) => {
+                if (!txt) return;
+                const page = docs[currentDocIdx].pages[currentPageIdx];
+                page.annotations.push({ type: 'text', text: txt, x: 0.5, y: 0.5, color: inkColor, size: 26 });
+                selectedAnnIdx = page.annotations.length - 1;
+                renderEditorCanvas();
+                showToast('تم إدراج النص! اسحبه بإصبعك لتغيير مكانه');
+            });
+        }
+
+        function openEditorWatermarkModal() {
+            openCustomPrompt('أدخل نص العلامة المائية لجميع صفحات المستند:', 'نسخة أصلية', (txt) => {
+                docs[currentDocIdx].pages.forEach(p => p.watermark = txt || '');
+                renderEditorCanvas();
+                showToast('تم تحديث العلامة المائية');
+            });
+        }
+
+        function insertOfficialStamp() {
+            const page = docs[currentDocIdx].pages[currentPageIdx];
+            page.annotations.push({
+                type: 'stamp',
+                text: 'معتمد رسمياً - APPROVED',
+                x: 0.5,
+                y: 0.65,
+                color: '#1d4ed8',
+                size: 22
+            });
+            selectedAnnIdx = page.annotations.length - 1;
+            docs[currentDocIdx].signed = true;
+            renderEditorCanvas();
+            showToast('تم إضافة الختم الرسمي! اسحبه لأي مكان');
+        }
+
+        function insertTimestampAnnotation() {
+            const page = docs[currentDocIdx].pages[currentPageIdx];
+            const nowStr = '🕒 ' + new Date().toLocaleDateString('ar-EG') + ' ' + new Date().toTimeString().slice(0, 5);
+            page.annotations.push({
+                type: 'text',
+                text: nowStr,
+                x: 0.5,
+                y: 0.88,
+                color: '#0f766e',
+                size: 20
+            });
+            selectedAnnIdx = page.annotations.length - 1;
+            renderEditorCanvas();
+            showToast('تم إدراج الطابع الزمني');
+        }
+
+        function resizeSelectedAnnotation(factor) {
+            const page = docs[currentDocIdx].pages[currentPageIdx];
+            const ann = page.annotations[selectedAnnIdx];
+            if (!ann) return;
+            ann.size = Math.max(12, Math.min(72, Math.round(ann.size * factor)));
+            renderEditorCanvas();
+        }
+
+        function deleteSelectedAnnotation() {
+            const page = docs[currentDocIdx].pages[currentPageIdx];
+            if (selectedAnnIdx === -1) return;
+            page.annotations.splice(selectedAnnIdx, 1);
+            selectedAnnIdx = -1;
+            renderEditorCanvas();
+        }
+
+        function undoEditorAnnotation() {
+            const page = docs[currentDocIdx].pages[currentPageIdx];
+            page.annotations.pop();
+            selectedAnnIdx = -1;
+            renderEditorCanvas();
+        }
+
+        // Page Management inside Editor
+        function addBlankPageToCurrentDoc() {
+            const c = document.createElement('canvas');
+            c.width = 680;
+            c.height = 940;
+            const g = c.getContext('2d');
+            g.fillStyle = '#ffffff';
+            g.fillRect(0, 0, c.width, c.height);
+            docs[currentDocIdx].pages.push(createPageObj(c, 'original'));
+            currentPageIdx = docs[currentDocIdx].pages.length - 1;
+            renderEditorCanvas();
+            showToast('تمت إضافة صفحة بيضاء جديدة');
+        }
+
+        function rotateActivePage() {
+            const page = docs[currentDocIdx].pages[currentPageIdx];
+            const rot = (src) => {
+                const c = document.createElement('canvas');
+                c.width = src.height;
+                c.height = src.width;
+                const g = c.getContext('2d');
+                g.translate(c.width / 2, c.height / 2);
+                g.rotate(Math.PI / 2);
+                g.drawImage(src, -src.width / 2, -src.height / 2);
+                return c;
+            };
+            page.baseCanvas = rot(page.baseCanvas);
+            page.rawCanvas = rot(page.rawCanvas);
+            renderEditorCanvas();
+        }
+
+        function reorderActivePage(dir) {
+            const pages = docs[currentDocIdx].pages;
+            const target = currentPageIdx + dir;
+            if (target < 0 || target >= pages.length) return;
+            [pages[currentPageIdx], pages[target]] = [pages[target], pages[currentPageIdx]];
+            currentPageIdx = target;
+            renderEditorCanvas();
+            showToast(`تم نقل الصفحة إلى موضع ص ${target + 1}`);
+        }
+
+        function deleteActivePage() {
+            const pages = docs[currentDocIdx].pages;
+            if (pages.length <= 1) {
+                showToast('لا يمكن حذف الصفحة الوحيدة في المستند');
+                return;
+            }
+            pages.splice(currentPageIdx, 1);
+            currentPageIdx = Math.max(0, currentPageIdx - 1);
+            renderEditorCanvas();
+        }
+
+        // ===================================================================
+        // DELIVERING FILES ON iPHONE (Share sheet → Save to Files, AirDrop, WhatsApp…)
+        // ===================================================================
+        let pendingFile = null;
+
+        function safeFileName(name) {
+            return (name || 'document').replace(/[\\/:*?"<>|]+/g, '-').trim() || 'document';
+        }
+
+        function deliverFile(blob, filename) {
+            filename = safeFileName(filename);
+            pendingFile = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
+            const ext = filename.split('.').pop().toLowerCase();
+            const icon = { pdf: 'fa-file-pdf', doc: 'fa-file-word', csv: 'fa-file-excel', jpg: 'fa-file-image', png: 'fa-file-image' }[ext] || 'fa-file';
+            document.getElementById('fileReadyIcon').className = 'fa-solid ' + icon;
+            document.getElementById('fileReadyName').textContent = filename;
+            document.getElementById('fileReadyModal').classList.remove('hidden');
+        }
+
+        function closeFileReady() {
+            document.getElementById('fileReadyModal').classList.add('hidden');
+            pendingFile = null;
+        }
+
+        function fallbackDownload(file) {
+            const url = URL.createObjectURL(file);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = file.name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 60000);
+        }
+
+        document.getElementById('fileReadyShareBtn').addEventListener('click', async () => {
+            const file = pendingFile;
+            if (!file) return;
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                try {
+                    await navigator.share({ files: [file], title: file.name });
+                    closeFileReady();
+                } catch (e) {
+                    if (e && e.name !== 'AbortError') fallbackDownload(file);
+                }
+            } else {
+                fallbackDownload(file);
+                closeFileReady();
+            }
+        });
+
+        // Draw a page into a jsPDF A4 page, keeping its proportions
+        function addCanvasToPdf(pdf, canvas, quality) {
+            const pw = pdf.internal.pageSize.getWidth();
+            const ph = pdf.internal.pageSize.getHeight();
+            const ratio = Math.min(pw / canvas.width, ph / canvas.height);
+            const w = canvas.width * ratio;
+            const h = canvas.height * ratio;
+            pdf.addImage(canvas.toDataURL('image/jpeg', quality), 'JPEG', (pw - w) / 2, (ph - h) / 2, w, h);
+        }
+
+        function downscaleCanvas(src, maxW) {
+            if (!maxW || src.width <= maxW) return src;
+            const s = maxW / src.width;
+            const c = document.createElement('canvas');
+            c.width = Math.round(src.width * s);
+            c.height = Math.round(src.height * s);
+            c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+            return c;
+        }
+
+        async function buildPdfBlob(doc, pages, quality = 0.92, maxW = 0) {
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const temp = document.createElement('canvas');
+            pages.forEach((p, idx) => {
+                if (idx > 0) pdf.addPage();
+                renderPageCompositeToCanvas(p, temp, false);
+                addCanvasToPdf(pdf, downscaleCanvas(temp, maxW), quality);
+            });
+            temp.width = temp.height = 0;
+            return pdf.output('blob');
+        }
+
+        async function extractSinglePagePDF() {
+            const doc = docs[currentDocIdx];
+            if (!doc) return;
+            const page = doc.pages[currentPageIdx];
+            const blob = await buildPdfBlob(doc, [page]);
+            deliverFile(blob, `${doc.title}_page${currentPageIdx + 1}.pdf`);
+        }
+
+        // ===================================================================
+        // EXPORT & CONVERSION TOOLS (PDF, Word, Excel, PPT, Long Image, OCR)
+        // ===================================================================
+        async function exportCurrentDocToPDF(docIdx = currentDocIdx, opts = {}) {
+            showLoader(opts.compress ? 'جاري ضغط ملف PDF...' : 'جاري تجهيز ملف PDF...');
+            try {
+                await withDoc(docIdx, async (doc) => {
+                    await new Promise(r => setTimeout(r, 50));
+                    const blob = opts.compress
+                        ? await buildPdfBlob(doc, doc.pages, 0.6, 1100)
+                        : await buildPdfBlob(doc, doc.pages);
+                    deliverFile(blob, `${doc.title}${opts.compress ? '_compressed' : ''}.pdf`);
+                });
+            } catch (e) {
+                console.error(e);
+                showToast('تعذر إنشاء ملف PDF');
+            }
+            hideLoader();
+        }
+
+        async function exportDocToWord(docIdx = currentDocIdx) {
+            await withDoc(docIdx, async (doc) => {
+                const temp = document.createElement('canvas');
+                let imgs = '';
+                doc.pages.forEach(p => {
+                    renderPageCompositeToCanvas(p, temp, false);
+                    imgs += `<p><img src="${temp.toDataURL('image/jpeg', 0.85)}" width="540" /></p>`;
+                });
+                const wordHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' dir='rtl'><head><meta charset='utf-8'></head><body style="font-family:Cairo,sans-serif"><h2>${escapeHtml(doc.title)}</h2><p>التاريخ: ${escapeHtml(doc.date)}</p>${imgs}</body></html>`;
+                deliverFile(new Blob([wordHtml], { type: 'application/msword' }), `${doc.title}.doc`);
+            });
+        }
+
+        async function exportDocToExcel(docIdx = currentDocIdx) {
+            const doc = docs[docIdx];
+            if (!doc) { showToast('لا يوجد مستند بعد'); return; }
+            const q = v => `"${String(v).replace(/"/g, '""')}"`;
+            const csv = `﻿اسم المستند,التاريخ,عدد الصفحات,الحالة\n${q(doc.title)},${q(doc.date)},${doc.pages.length},${q('ممسوح ضوئياً')}`;
+            deliverFile(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), `${doc.title}.csv`);
+        }
+
+        function exportDocToPPT(docIdx = currentDocIdx) {
+            exportCurrentDocToPDF(docIdx);
+        }
+
+        async function exportDocAsJpgImages(docIdx = currentDocIdx) {
+            await withDoc(docIdx, async (doc) => {
+                const temp = document.createElement('canvas');
+                const idx = (editorOpen && docs[currentDocIdx] === doc) ? currentPageIdx : 0;
+                renderPageCompositeToCanvas(doc.pages[idx], temp, false);
+                const blob = await canvasToBlob(temp, 'image/jpeg', 0.94);
+                deliverFile(blob, `${doc.title}_${idx + 1}.jpg`);
+            });
+        }
+
+        async function exportDocAsLongImage(docIdx = currentDocIdx) {
+            showLoader('جاري تجهيز الصورة الطويلة...');
+            try {
+                await withDoc(docIdx, async (doc) => {
+                    const maxW = Math.max(...doc.pages.map(p => p.baseCanvas.width));
+                    const totalH = doc.pages.reduce((s, p) => s + p.baseCanvas.height * (maxW / p.baseCanvas.width), 0);
+                    // iPhone Safari cannot draw canvases larger than ~16.7 million pixels
+                    const scale = Math.min(1, Math.sqrt(16000000 / (maxW * totalH)), 32000 / totalH);
+                    const out = document.createElement('canvas');
+                    out.width = Math.floor(maxW * scale);
+                    out.height = Math.floor(totalH * scale);
+                    const g = out.getContext('2d');
+                    g.fillStyle = '#ffffff';
+                    g.fillRect(0, 0, out.width, out.height);
+                    const temp = document.createElement('canvas');
+                    let y = 0;
+                    doc.pages.forEach(p => {
+                        renderPageCompositeToCanvas(p, temp, false);
+                        const h = temp.height * (out.width / temp.width);
+                        g.drawImage(temp, 0, y, out.width, h);
+                        y += h;
+                    });
+                    const blob = await canvasToBlob(out, 'image/jpeg', 0.9);
+                    out.width = out.height = 0;
+                    deliverFile(blob, `${doc.title}_long.jpg`);
+                });
+            } catch (e) {
+                console.error(e);
+                showToast('تعذر إنشاء الصورة الطويلة');
+            }
+            hideLoader();
+        }
+
+        // OCR runs fully on the phone with bundled Arabic + English language data
+        let ocrWorkerPromise = null;
+        function getOcrWorker() {
+            if (!ocrWorkerPromise) {
+                ocrWorkerPromise = Tesseract.createWorker('ara+eng', 1, {
+                    workerPath: 'vendor/tesseract/worker.min.js',
+                    corePath: 'vendor/tesseract/core',
+                    langPath: 'vendor/tesseract/lang',
+                    workerBlobURL: false,
+                    logger: m => {
+                        if (m && m.status && typeof m.progress === 'number') {
+                            const pct = Math.round(m.progress * 100);
+                            const label = m.status.includes('recogniz') ? 'جاري التعرف على النص' : 'جاري تجهيز محرك النصوص';
+                            document.getElementById('globalLoaderText').textContent = `${label}... ${pct}%`;
+                        }
+                    }
+                }).catch(e => { ocrWorkerPromise = null; throw e; });
+            }
+            return ocrWorkerPromise;
+        }
+
+        async function runOcrOnActivePage() {
+            const doc = docs[currentDocIdx];
+            if (!doc || !editorOpen) return;
+            showLoader('جاري استخراج النص...');
+            const temp = document.createElement('canvas');
+            try {
+                renderPageCompositeToCanvas(doc.pages[currentPageIdx], temp, false);
+                const worker = await getOcrWorker();
+                const res = await worker.recognize(temp);
+                const txt = (res?.data?.text || '').trim();
+                document.getElementById('ocrResultBox').value = txt || 'لم يتم العثور على نص واضح في هذه الصفحة. جرّب صورة أوضح أو فلتر «أبيض وأسود».';
+            } catch (e) {
+                console.error(e);
+                document.getElementById('ocrResultBox').value = 'تعذر تشغيل استخراج النص. افتح التطبيق مرة واحدة مع اتصال بالإنترنت ثم حاول مجدداً.';
+            }
+            temp.width = temp.height = 0;
+            hideLoader();
+            document.getElementById('ocrResultModal').classList.remove('hidden');
+        }
+
+        async function copyOcrText() {
+            const box = document.getElementById('ocrResultBox');
+            try {
+                await navigator.clipboard.writeText(box.value);
+            } catch (e) {
+                box.select();
+                document.execCommand('copy');
+            }
+            showToast('تم نسخ النص إلى الحافظة 📋');
+        }
+
+        // Additional Special Tools from Tools Screen
+        function launchIdCardScanner() {
+            showToast('وضع مسح بطاقات الهوية: اختر صورة الهوية');
+            document.getElementById('importImageInput').click();
+        }
+
+        function launchIdPhotoMaker() {
+            showToast('صانع الصور الشخصية: اختر صورتك لتجهيزها');
+            document.getElementById('importImageInput').click();
+        }
+
+        function renderFolderTile(folderName) {
+            const container = document.getElementById('foldersListContainer');
+            const div = document.createElement('div');
+            div.className = 'bg-[#f2f4f7] rounded-2xl p-3.5 flex items-center justify-between cursor-pointer';
+            div.innerHTML = `
+                <div class="flex items-center gap-3.5">
+                    <div class="w-11 h-10 rounded-lg bg-[#52b79a] text-white flex items-center justify-center text-lg shadow-sm">
+                        <i class="fa-solid fa-folder"></i>
+                    </div>
+                    <span class="font-bold text-sm text-gray-900">${escapeHtml(folderName)}</span>
+                </div>
+            `;
+            container.prepend(div);
+        }
+
+        function openCreateFolderModal() {
+            openCustomPrompt('إنشاء مجلد جديد - أدخل اسم المجلد:', 'مستندات العمل', (folderName) => {
+                if (!folderName) return;
+                customFolders.push(folderName);
+                renderFolderTile(folderName);
+                markDirty(null);
+                showToast(`تم إنشاء مجلد "${folderName}" بنجاح`);
+            });
+        }
+
+        function openLockDocModal() {
+            const idx = editorOpen ? currentDocIdx : 0;
+            const doc = docs[idx];
+            if (!doc) { showToast('لا يوجد مستند لقفله'); return; }
+            openCustomPrompt(`أدخل كلمة مرور لقفل المستند «${doc.title}»:`, '', (pass) => {
+                if (!pass) return;
+                doc.locked = true;
+                doc.password = pass;
+                unlockedThisSession.delete(doc.id);
+                markDirty(doc);
+                renderAllDocLists();
+                showToast('تم قفل المستند بكلمة مرور 🔒');
+            }, true);
+        }
+
+        function compressCurrentPdf() {
+            exportCurrentDocToPDF(editorOpen ? currentDocIdx : 0, { compress: true });
+        }
+
+        function openQrGeneratorModal() {
+            openCustomPrompt('أدخل النص أو الرابط لتوليد رمز QR في مستند جديد:', '', (val) => {
+                if (!val) return;
+                showToast('ميزة رمز QR غير متوفرة بعد');
+            });
+        }
+
+        function openRulerToolModal() {
+            showToast('أداة القياس: التقط صورة');
+            openCameraScanner();
+        }
+
+        function openCountCamModal() {
+            showToast('CountCam: التقط صورة');
+            openCameraScanner();
+        }
+
+        // Delete documents
+        function openConfirm(title, onOk) {
+            document.getElementById('confirmModalTitle').textContent = title;
+            document.getElementById('confirmModal').classList.remove('hidden');
+            document.getElementById('confirmModalOkBtn').onclick = () => {
+                document.getElementById('confirmModal').classList.add('hidden');
+                onOk();
+            };
+        }
+
+        function confirmDeleteCurrentDoc() {
+            const doc = docs[currentDocIdx];
+            if (!doc) return;
+            openConfirm(`حذف المستند «${doc.title}» نهائياً؟`, async () => {
+                document.getElementById('docEditorModal').classList.add('hidden');
+                editorOpen = false;
+                dirtyDocs.delete(doc);
+                releaseDoc(doc);
+                if (doc.thumbUrl) URL.revokeObjectURL(doc.thumbUrl);
+                docs.splice(docs.indexOf(doc), 1);
+                currentDocIdx = 0;
+                await saveChain;
+                await deleteDocFromDB(doc.id);
+                renderAllDocLists();
+                showToast('تم حذف المستند');
+            });
+        }
+
+        function confirmDeleteAllDocs() {
+            if (!docs.length) { showToast('لا توجد مستندات'); return; }
+            openConfirm(`حذف كل المستندات (${docs.length}) نهائياً من هذا الجهاز؟`, async () => {
+                const all = docs.slice();
+                docs = [];
+                dirtyDocs.clear();
+                await saveChain;
+                for (const d of all) {
+                    if (d.thumbUrl) URL.revokeObjectURL(d.thumbUrl);
+                    await idbReq('docs', 'readwrite', s => s.delete(d.id));
+                }
+                await persistMeta();
+                updateStorageInfo();
+                renderAllDocLists();
+                showToast('تم حذف كل المستندات');
+            });
+        }
+
+        function escapeHtml(str) {
+            return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        // Custom Prompt Helper (Replaces native prompt/alert)
+        function openCustomPrompt(title, defaultValue, onConfirm, isPassword = false) {
+            document.getElementById('promptModalTitle').textContent = title;
+            const inp = document.getElementById('promptModalInput');
+            inp.type = isPassword ? 'password' : 'text';
+            inp.value = defaultValue || '';
+            document.getElementById('customPromptModal').classList.remove('hidden');
+            setTimeout(() => inp.focus(), 60);
+
+            const btn = document.getElementById('promptModalConfirmBtn');
+            btn.onclick = () => {
+                const val = inp.value.trim();
+                closeCustomPrompt();
+                if (onConfirm) onConfirm(val);
+            };
+        }
+
+        function closeCustomPrompt() {
+            document.getElementById('customPromptModal').classList.add('hidden');
+        }
+
+        function showLoader(msg) {
+            document.getElementById('globalLoaderText').textContent = msg;
+            document.getElementById('globalLoader').classList.remove('hidden');
+        }
+
+        function hideLoader() {
+            document.getElementById('globalLoader').classList.add('hidden');
+        }
+
+        let toastTimer = null;
+        function showToast(msg) {
+            const t = document.getElementById('toastBanner');
+            t.textContent = msg;
+            t.classList.remove('opacity-0', 'pointer-events-none');
+            if (toastTimer) clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => {
+                t.classList.add('opacity-0', 'pointer-events-none');
+            }, 2400);
+        }
+
+        // Start App
+        initApp();
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW', e));
+            });
+        }
+    </script>
+</body>
+</html>
