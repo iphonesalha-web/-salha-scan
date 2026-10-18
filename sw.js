@@ -1,5 +1,5 @@
 // Bump VERSION whenever you change any file, so iPhones pick up the update.
-const VERSION = 'v2';
+const VERSION = 'v3';
 const SHELL_CACHE = 'salha-scan-shell-' + VERSION;
 const OCR_CACHE = 'salha-scan-ocr-v1'; // large OCR files; only change if you replace them
 
@@ -10,7 +10,7 @@ const SHELL = [
   'icons/apple-touch-icon.png',
   'icons/icon-192.png',
   'icons/icon-512.png',
-  'vendor/app.css',
+  'vendor/app-bbbd81ed.css',
   'vendor/fonts/cairo-arabic-wght-normal.woff2',
   'vendor/fonts/cairo-latin-wght-normal.woff2',
   'vendor/fonts/cairo-latin-ext-wght-normal.woff2',
