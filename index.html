@@ -17,7 +17,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 
     <!-- All libraries are bundled locally so the app works offline -->
-    <link rel="stylesheet" href="vendor/app-bbbd81ed.css">
+    <link rel="stylesheet" href="vendor/app-9a73fbef.css">
     <link rel="stylesheet" href="vendor/fa/css/all.min.css">
     <script src="vendor/pdf.min.js"></script>
     <script src="vendor/jspdf.umd.min.js"></script>
@@ -312,19 +312,19 @@
             </div>
 
             <!-- CS AI Gradient Banner Card (Screenshot 3) -->
-            <div onclick="openDocWithTool(0, 'ocr')" class="cs-ai-banner rounded-2xl p-4 flex items-center justify-between cursor-pointer shadow-sm border border-teal-100/80 relative overflow-hidden">
+            <div onclick="openDocWithTool(0, 'ai')" class="cs-ai-banner rounded-2xl p-4 flex items-center justify-between cursor-pointer shadow-sm border border-teal-100/80 relative overflow-hidden">
                 <div class="flex items-center gap-3 z-10">
                     <div class="w-12 h-12 rounded-2xl bg-slate-900 text-teal-300 flex items-center justify-center text-xl shadow-md border-2 border-white">
                         <i class="fa-solid fa-wand-magic-sparkles"></i>
                     </div>
                     <div>
-                        <div class="text-xs font-bold text-teal-800">الماسح الذكي واستخراج النصوص</div>
-                        <div class="text-[10px] text-slate-500">انقر لتشغيل الذكاء الاصطناعي على مستندك</div>
+                        <div class="text-xs font-bold text-teal-800">الذكاء الاصطناعي</div>
+                        <div class="text-[10px] text-slate-500">شرح، ترجمة، واستخراج بيانات مستندك بالعربي</div>
                     </div>
                 </div>
                 <div class="text-2xl font-black tracking-tight text-slate-900 z-10 flex items-center gap-1" dir="ltr">
-                    <span>OCR</span>
-                    <i class="fa-solid fa-wand-magic-sparkles text-sm text-slate-800"></i>
+                    <span>AI</span>
+                    <i class="fa-solid fa-robot text-sm text-slate-800"></i>
                 </div>
             </div>
 
@@ -619,6 +619,35 @@
                 </p>
             </div>
 
+            <div class="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 space-y-3 text-xs">
+                <div class="flex items-center gap-2">
+                    <div class="w-9 h-9 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center"><i class="fa-solid fa-robot"></i></div>
+                    <h3 class="font-black text-sm text-gray-900">الذكاء الاصطناعي</h3>
+                </div>
+                <label class="block font-bold text-gray-600">المزوّد
+                    <select id="aiProvider" class="mt-1 w-full bg-gray-100 border border-gray-200 rounded-xl px-3 py-2.5 text-xs text-gray-900">
+                        <option value="gemini">Google Gemini — مجاني</option>
+                        <option value="claude">Claude (Anthropic) — مدفوع</option>
+                    </select>
+                </label>
+                <label class="block font-bold text-gray-600">النموذج
+                    <select id="aiModel" class="mt-1 w-full bg-gray-100 border border-gray-200 rounded-xl px-3 py-2.5 text-xs text-gray-900"></select>
+                </label>
+                <label class="block font-bold text-gray-600"><span id="aiKeyLabel">مفتاح Gemini</span>
+                    <input id="aiKey" type="password" autocomplete="off" dir="ltr" class="mt-1 w-full bg-gray-100 border border-gray-200 rounded-xl px-3 py-2.5 text-xs text-gray-900">
+                </label>
+                <p id="aiHelp" class="text-[11px] text-gray-500 leading-relaxed"></p>
+                <label class="flex items-center justify-between gap-3 font-bold text-gray-700">
+                    <span>تسمية المستند تلقائياً بعد المسح</span>
+                    <input id="aiAutoName" type="checkbox" class="w-5 h-5 accent-[#16a085]">
+                </label>
+                <div class="flex items-center gap-2">
+                    <button onclick="aiSaveSettings(true)" class="px-4 py-2 rounded-xl cs-teal-bg text-white font-bold">حفظ</button>
+                    <button onclick="aiTestConnection()" class="px-4 py-2 rounded-xl bg-gray-100 text-gray-700 font-bold">اختبار الاتصال</button>
+                    <span id="aiInfo" class="text-[11px] font-bold"></span>
+                </div>
+            </div>
+
             <div class="bg-white rounded-3xl divide-y divide-gray-100 shadow-sm border border-gray-100 text-xs font-bold text-gray-700">
                 <button onclick="switchMainTab('tools')" class="w-full p-4 flex items-center justify-between">
                     <span><i class="fa-solid fa-wand-magic-sparkles text-teal-600 ml-2"></i> الأدوات واستخراج النصوص</span>
@@ -789,6 +818,9 @@
                 <button onclick="insertTimestampAnnotation()" class="px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 shrink-0">
                     🕒 طابع زمني
                 </button>
+                <button onclick="openAiSheet()" class="px-2.5 py-1.5 rounded-xl bg-gradient-to-l from-violet-600 to-indigo-600 text-white shrink-0">
+                    🤖 ذكاء اصطناعي
+                </button>
                 <button onclick="runOcrOnActivePage()" class="px-2.5 py-1.5 rounded-xl bg-teal-700 text-white shrink-0">
                     🔍 استخراج نص OCR
                 </button>
@@ -874,6 +906,48 @@
             <button onclick="deleteSelectedDocs()" class="px-3 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold flex items-center gap-1.5">
                 <i class="fa-solid fa-trash"></i><span>حذف</span>
             </button>
+        </div>
+    </div>
+
+    <!-- AI Sheet -->
+    <div id="aiModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-end justify-center">
+        <div class="bg-white rounded-t-3xl w-full max-w-md p-4 flex flex-col gap-3 max-h-[90dvh]" style="padding-bottom: calc(var(--sab) + 1rem)">
+            <div class="flex items-center justify-between">
+                <h3 class="font-black text-sm text-gray-900 flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-xl bg-gradient-to-l from-violet-600 to-indigo-600 text-white flex items-center justify-center"><i class="fa-solid fa-robot"></i></span>
+                    <span>الذكاء الاصطناعي</span>
+                </h3>
+                <button onclick="closeAiSheet()" class="w-8 h-8 rounded-xl bg-gray-100 text-gray-500 font-bold">✕</button>
+            </div>
+
+            <div class="flex bg-gray-100 rounded-xl p-1 text-[11px] font-bold">
+                <button id="aiScope-page" onclick="setAiScope('page')" class="flex-1 py-1.5 rounded-lg">هذه الصفحة</button>
+                <button id="aiScope-doc" onclick="setAiScope('doc')" class="flex-1 py-1.5 rounded-lg">كل المستند</button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 text-xs font-bold">
+                <button onclick="runAiAction('explain')" class="ai-action py-3 rounded-2xl bg-violet-50 text-violet-700 border border-violet-100">💡 شرح وتلخيص</button>
+                <button onclick="runAiAction('translate')" class="ai-action py-3 rounded-2xl bg-sky-50 text-sky-700 border border-sky-100">🌐 ترجمة للعربي</button>
+                <button onclick="runAiAction('ocr')" class="ai-action py-3 rounded-2xl bg-teal-50 text-teal-700 border border-teal-100">📝 استخراج النص</button>
+                <button onclick="runAiAction('invoice')" class="ai-action py-3 rounded-2xl bg-amber-50 text-amber-700 border border-amber-100">🧾 بيانات الفاتورة</button>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <input id="aiQuestion" type="text" placeholder="اسأل أي سؤال عن المستند…" dir="auto"
+                    onkeydown="if(event.key==='Enter'){runAiAction('ask')}"
+                    class="flex-1 bg-gray-100 border border-gray-200 rounded-2xl px-4 py-3 text-xs text-gray-900 focus:outline-none focus:border-violet-500">
+                <button onclick="runAiAction('ask')" class="ai-action w-11 h-11 rounded-2xl bg-violet-600 text-white flex items-center justify-center shrink-0" aria-label="إرسال">
+                    <i class="fa-solid fa-paper-plane"></i>
+                </button>
+            </div>
+
+            <div id="aiResultWrap" class="hidden flex-1 min-h-0 flex flex-col gap-2">
+                <div id="aiResult" dir="auto" class="flex-1 min-h-[120px] overflow-y-auto bg-gray-50 border border-gray-200 rounded-2xl p-3 text-[13px] text-gray-800 leading-relaxed whitespace-pre-wrap select-text" style="user-select:text;-webkit-user-select:text"></div>
+                <div id="aiResultActions" class="grid grid-cols-2 gap-2">
+                    <button onclick="copyAiResult()" class="py-2.5 rounded-xl cs-teal-bg text-white text-xs font-bold">📋 نسخ</button>
+                    <button onclick="shareAiResult()" class="py-2.5 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold">📤 مشاركة</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1213,6 +1287,7 @@
                 console.error(e);
                 showToast('تعذر فتح ذاكرة التطبيق');
             }
+            try { aiShowSettings(); } catch (e) { console.error(e); }
             customFolders.forEach(name => renderFolderTile(name));
             renderAllDocLists();
             updateStorageInfo();
@@ -1462,6 +1537,7 @@
                             await openDocEditor(0);
                             markDirty(docs[0]);
                             await flushSaves();
+                            if (title === stamp.title) aiAutoNameDoc(docs[0], stamp.title);
                             renderAllDocLists();
                             const hadImages = files.some(f => f.type.startsWith('image/'));
                             showToast(!hadImages ? 'تم حفظ المستند وفتحه في المحرر'
@@ -1590,7 +1666,9 @@
                 else if (toolName === 'watermark') openEditorWatermarkModal();
                 else if (toolName === 'timestamp') insertTimestampAnnotation();
                 else if (toolName === 'magic') applyPageFilter('magic');
-                else if (toolName === 'ocr' || toolName === 'translate') runOcrOnActivePage();
+                else if (toolName === 'ocr') runOcrOnActivePage();
+                else if (toolName === 'ai') openAiSheet();
+                else if (toolName === 'translate') openAiSheet('translate');
                 else if (toolName === 'extractPages') extractSinglePagePDF();
                 else if (toolName === 'reorder') showToast('استخدم أزرار الأسهم ⬅️ ➡️ بالأسفل لإعادة ترتيب الصفحات');
             }, 150);
@@ -2715,6 +2793,287 @@
                 document.execCommand('copy');
             }
             showToast('تم نسخ النص إلى الحافظة 📋');
+        }
+
+        // ===================================================================
+        // AI (Google Gemini free tier, or Claude) — same setup as the invoicing app.
+        // The API key is stored ONLY on this device (localStorage), never uploaded.
+        // ===================================================================
+        const AI_PROVIDER_KEY = 'salha_ki_anbieter';
+        const AI_AUTONAME_KEY = 'salha_scan_ai_autoname';
+        const AI_CFG = {
+            gemini: {
+                key: 'salha_gem_key', model: 'salha_gem_model', placeholder: 'AIza…', label: 'مفتاح Gemini',
+                models: [['gemini-3.8-flash', 'Gemini 3.8 Flash — دقيق (مُستحسن)'], ['gemini-3.5-flash-lite', 'Gemini 3.5 Flash-Lite — أسرع']],
+                help: 'مفتاح مجاني من <b dir="ltr">aistudio.google.com</b> ← Get API key (بحساب Google). ملاحظة: في الخطة المجانية قد تستخدم Google المحتوى لتحسين منتجاتها، فلا ترسل وثائق شخصية حساسة مثل الهوية.'
+            },
+            claude: {
+                key: 'salha_ki_key', model: 'salha_ki_model', placeholder: 'sk-ant-…', label: 'مفتاح Claude',
+                models: [['claude-sonnet-5-5', 'Sonnet 5.5 — دقيق (مُستحسن)'], ['claude-haiku-5-5', 'Haiku 5.5 — أرخص']],
+                help: 'المفتاح من <b dir="ltr">console.anthropic.com</b> ← API Keys. ضع حداً شهرياً للمصاريف هناك.'
+            }
+        };
+        const lsGet = (k, d = '') => { try { return localStorage.getItem(k) || d; } catch (e) { return d; } };
+        const lsSet = (k, v) => { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch (e) { } };
+        function aiProvider() { const a = lsGet(AI_PROVIDER_KEY); return AI_CFG[a] ? a : 'gemini'; }
+        function aiKey() { return lsGet(AI_CFG[aiProvider()].key); }
+        function aiModelName() { const c = AI_CFG[aiProvider()]; const m = lsGet(c.model); return c.models.some(x => x[0] === m) ? m : c.models[0][0]; }
+        function aiAutoNameOn() { return lsGet(AI_AUTONAME_KEY, '1') === '1'; }
+
+        function aiShowSettings() {
+            const an = aiProvider(), c = AI_CFG[an];
+            document.getElementById('aiProvider').value = an;
+            document.getElementById('aiModel').innerHTML = c.models.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+            document.getElementById('aiModel').value = aiModelName();
+            const k = document.getElementById('aiKey');
+            k.value = aiKey(); k.placeholder = c.placeholder;
+            document.getElementById('aiKeyLabel').textContent = c.label;
+            document.getElementById('aiHelp').innerHTML = c.help;
+            document.getElementById('aiAutoName').checked = aiAutoNameOn();
+        }
+
+        function aiInfo(text, color) {
+            const el = document.getElementById('aiInfo');
+            el.textContent = text; el.style.color = color || '#64748b';
+        }
+
+        function aiSaveSettings(showMsg) {
+            const an = document.getElementById('aiProvider').value;
+            const c = AI_CFG[an];
+            lsSet(AI_PROVIDER_KEY, an);
+            lsSet(c.key, document.getElementById('aiKey').value.trim());
+            lsSet(c.model, document.getElementById('aiModel').value);
+            lsSet(AI_AUTONAME_KEY, document.getElementById('aiAutoName').checked ? '1' : '0');
+            if (showMsg) aiInfo(aiKey() ? 'تم الحفظ ✓' : 'تم حذف المفتاح', '#16a085');
+        }
+
+        document.getElementById('aiProvider').addEventListener('change', () => {
+            lsSet(AI_PROVIDER_KEY, document.getElementById('aiProvider').value);
+            aiShowSettings(); aiInfo('');
+        });
+
+        async function aiTestConnection() {
+            aiSaveSettings(false);
+            if (!aiKey()) { aiInfo('❌ لا يوجد مفتاح', '#e11d48'); return; }
+            aiInfo('جاري الاختبار…');
+            try {
+                await aiCall('أجب فقط بكلمة: OK', [], 30000);
+                aiInfo('✅ الاتصال يعمل', '#16a085');
+            } catch (e) {
+                aiInfo('❌ ' + e.message, '#e11d48');
+            }
+        }
+
+        // Low-level call: prompt + JPEG images (base64) → plain text
+        async function aiCall(prompt, images, timeoutMs = 120000) {
+            const key = aiKey();
+            if (!key) throw new Error('أدخل مفتاح الذكاء الاصطناعي في صفحة «أنا»');
+            if (!navigator.onLine) throw new Error('لا يوجد اتصال بالإنترنت');
+            const ctl = new AbortController();
+            const tm = setTimeout(() => ctl.abort(), timeoutMs);
+            let res, j;
+            try {
+                if (aiProvider() === 'gemini') {
+                    const parts = images.map(b64 => ({ inline_data: { mime_type: 'image/jpeg', data: b64 } }));
+                    parts.push({ text: prompt });
+                    res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(aiModelName()) + ':generateContent', {
+                        method: 'POST', signal: ctl.signal,
+                        headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+                        body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: { temperature: 0.2 } })
+                    });
+                } else {
+                    const content = images.map(b64 => ({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } }));
+                    content.push({ type: 'text', text: prompt });
+                    res = await fetch('https://api.anthropic.com/v1/messages', {
+                        method: 'POST', signal: ctl.signal,
+                        headers: {
+                            'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01',
+                            'anthropic-dangerous-direct-browser-access': 'true'
+                        },
+                        body: JSON.stringify({ model: aiModelName(), max_tokens: 4000, messages: [{ role: 'user', content }] })
+                    });
+                }
+                j = await res.json().catch(() => ({}));
+            } catch (e) {
+                throw new Error(e.name === 'AbortError' ? 'انتهت المهلة — حاول مرة أخرى' : 'تعذر الاتصال بالذكاء الاصطناعي');
+            } finally {
+                clearTimeout(tm);
+            }
+            if (!res.ok) {
+                const msg = (j.error && j.error.message) || ('HTTP ' + res.status);
+                if (res.status === 401 || res.status === 403 || (res.status === 400 && /api key/i.test(msg))) throw new Error('المفتاح غير صحيح');
+                if (res.status === 429) throw new Error('تم الوصول للحد المجاني — حاول لاحقاً');
+                if (res.status === 402 || /credit|billing/i.test(msg)) throw new Error('الرصيد فارغ في حساب Anthropic');
+                throw new Error('خطأ من الذكاء الاصطناعي: ' + msg);
+            }
+            let txt = '';
+            if (aiProvider() === 'gemini') {
+                const c = (j.candidates || [])[0];
+                txt = c && c.content ? (c.content.parts || []).map(p => p.text || '').join('') : '';
+            } else {
+                txt = (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
+            }
+            txt = (txt || '').trim();
+            if (!txt) throw new Error('لم يتمكن الذكاء الاصطناعي من قراءة المستند');
+            return txt;
+        }
+
+        // Render page(s) to compact JPEGs for upload
+        function pageToJpegBase64(page, maxDim = 1600) {
+            const full = document.createElement('canvas');
+            renderPageCompositeToCanvas(page, full, false);
+            const sc = Math.min(1, maxDim / Math.max(full.width, full.height));
+            const c = document.createElement('canvas');
+            c.width = Math.round(full.width * sc); c.height = Math.round(full.height * sc);
+            const g = c.getContext('2d');
+            g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+            g.drawImage(full, 0, 0, c.width, c.height);
+            full.width = full.height = 0;
+            const b64 = c.toDataURL('image/jpeg', 0.85).split(',')[1];
+            c.width = c.height = 0;
+            return b64;
+        }
+
+        // Strip markdown the model may add anyway
+        function cleanAiText(t) {
+            return t.replace(/^```[a-z]*\s*/i, '').replace(/```\s*$/, '')
+                .replace(/\*\*(.+?)\*\*/g, '$1').replace(/^#{1,6}\s*/gm, '')
+                .replace(/^\s*[-*]\s+/gm, '• ').trim();
+        }
+
+        const AI_PROMPTS = {
+            explain: 'هذه صور مستند ممسوح ضوئياً (قد يكون بالألمانية أو أي لغة). اشرحه بالعربية ببساطة ووضوح لشخص يعيش في ألمانيا: ' +
+                'ما نوع المستند، ومن أرسله، وما المطلوب مني بالضبط، والمواعيد النهائية والمبالغ إن وُجدت، وماذا يجب أن أفعل الآن. ' +
+                'اكتب نقاطاً قصيرة تبدأ بـ • ، نص عادي بدون Markdown. لا تخترع معلومات غير موجودة في المستند.',
+            translate: 'ترجم كامل نص هذا المستند إلى العربية بدقة، مع الحفاظ على ترتيب الفقرات والأرقام والتواريخ والمبالغ كما هي. ' +
+                'أسماء الشركات والعناوين وأرقام القطع اتركها بلغتها الأصلية. نص عادي بدون Markdown وبدون أي تعليق إضافي.',
+            ocr: 'انسخ كل النص الموجود في هذا المستند حرفياً وبلغته الأصلية، مع الحفاظ على ترتيب الأسطر. ' +
+                'الجداول اكتبها أسطراً مرتبة. نص عادي فقط بدون Markdown وبدون أي تعليق.',
+            invoice: 'هذه فاتورة أو إيصال. استخرج البيانات واكتبها بالعربية بنص عادي منظم بدون Markdown بهذا الشكل:\n' +
+                'المورد: …\nرقم الفاتورة: …\nالتاريخ: …\nالمبلغ الصافي: …\nالضريبة: …\nالإجمالي: …\n\nالبنود:\n• الوصف — رقم القطعة — الكمية × السعر = المجموع\n\n' +
+                'المبالغ باليورو بفاصلة عشرية. إذا لم يتطابق الصافي + الضريبة مع الإجمالي فاذكر ذلك في سطر «ملاحظة». لا تخترع شيئاً: اكتب «غير مذكور» لما لا تجده.',
+            ask: (q) => 'أجب عن السؤال التالي بالعربية بالاعتماد على هذا المستند فقط. إذا لم تكن الإجابة موجودة في المستند فقل ذلك بوضوح. ' +
+                'نص عادي مختصر بدون Markdown.\n\nالسؤال: ' + q
+        };
+
+        let aiScope = 'page';
+        let aiBusy = false;
+
+        function setAiScope(scope) {
+            aiScope = scope;
+            ['page', 'doc'].forEach(s => {
+                const b = document.getElementById('aiScope-' + s);
+                b.classList.toggle('bg-white', s === scope);
+                b.classList.toggle('shadow', s === scope);
+                b.classList.toggle('text-violet-700', s === scope);
+                b.classList.toggle('text-gray-500', s !== scope);
+            });
+        }
+
+        function openAiSheet(action) {
+            const doc = docs[currentDocIdx];
+            if (!doc || !editorOpen) return;
+            document.getElementById('aiModal').classList.remove('hidden');
+            setAiScope(doc.pages.length > 1 ? 'doc' : 'page');
+            document.getElementById('aiScope-page').parentElement.classList.toggle('hidden', doc.pages.length < 2);
+            if (!aiKey()) {
+                showAiResult('للاستخدام أدخل مفتاح الذكاء الاصطناعي مرة واحدة:\n\n• افتح صفحة «أنا» في الأسفل\n• في قسم «الذكاء الاصطناعي» الصق مفتاح Gemini المجاني\n• اضغط «حفظ»', false);
+                return;
+            }
+            if (action) runAiAction(action);
+        }
+
+        function closeAiSheet() {
+            document.getElementById('aiModal').classList.add('hidden');
+        }
+
+        function showAiResult(text, withActions = true, loading = false) {
+            document.getElementById('aiResultWrap').classList.remove('hidden');
+            const el = document.getElementById('aiResult');
+            el.innerHTML = '';
+            if (loading) {
+                el.innerHTML = '<div class="flex items-center gap-2 text-violet-700 font-bold"><div class="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin"></div><span></span></div>';
+                el.querySelector('span').textContent = text;
+            } else {
+                el.textContent = text;
+            }
+            document.getElementById('aiResultActions').classList.toggle('hidden', !withActions);
+        }
+
+        async function runAiAction(action) {
+            if (aiBusy) return;
+            const doc = docs[currentDocIdx];
+            if (!doc) return;
+            if (!aiKey()) { openAiSheet(); return; }
+            let prompt;
+            if (action === 'ask') {
+                const q = document.getElementById('aiQuestion').value.trim();
+                if (!q) { document.getElementById('aiQuestion').focus(); return; }
+                prompt = AI_PROMPTS.ask(q);
+            } else {
+                prompt = AI_PROMPTS[action];
+            }
+            const pages = aiScope === 'doc' ? doc.pages.slice(0, 10) : [doc.pages[currentPageIdx]];
+            aiBusy = true;
+            document.querySelectorAll('.ai-action').forEach(b => b.disabled = true);
+            showAiResult(pages.length > 1 ? `جاري قراءة ${pages.length} صفحات…` : 'جاري قراءة المستند…', false, true);
+            try {
+                const images = pages.map(p => pageToJpegBase64(p));
+                const txt = cleanAiText(await aiCall(prompt, images));
+                showAiResult(txt, true);
+                if (action === 'ask') document.getElementById('aiQuestion').value = '';
+            } catch (e) {
+                showAiResult('❌ ' + e.message, false);
+            } finally {
+                aiBusy = false;
+                document.querySelectorAll('.ai-action').forEach(b => b.disabled = false);
+            }
+        }
+
+        async function copyAiResult() {
+            const t = document.getElementById('aiResult').textContent;
+            try { await navigator.clipboard.writeText(t); }
+            catch (e) {
+                const ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta);
+                ta.select(); document.execCommand('copy'); ta.remove();
+            }
+            showToast('تم النسخ 📋');
+        }
+
+        async function shareAiResult() {
+            const t = document.getElementById('aiResult').textContent;
+            if (navigator.share) {
+                try { await navigator.share({ text: t }); } catch (e) { }
+            } else {
+                copyAiResult();
+            }
+        }
+
+        // After a scan: give the document a meaningful name in the background
+        async function aiAutoNameDoc(doc, autoTitle) {
+            if (!aiKey() || !aiAutoNameOn() || !navigator.onLine) return;
+            const page = doc.pages[0];
+            if (!page || !page.baseCanvas) return;
+            try {
+                const b64 = pageToJpegBase64(page, 1100);
+                let name = await aiCall(
+                    'اقترح اسماً قصيراً لهذا المستند (من 2 إلى 5 كلمات) بلغة المستند نفسها، يذكر نوعه والجهة المرسلة أو الموضوع، ' +
+                    'مثل: «Rechnung Autodoc» أو «Brief Finanzamt Steuerbescheid» أو «عقد إيجار». ' +
+                    'أجب بالاسم فقط في سطر واحد بدون علامات اقتباس وبدون تاريخ.', [b64], 45000);
+                name = name.split('\n')[0].replace(/["«»“”'`*#]/g, '').replace(/[\\/:*?<>|]+/g, '-').trim().slice(0, 60);
+                if (!name) return;
+                // Only rename if the user hasn't renamed it meanwhile
+                const editing = editorOpen && docs[currentDocIdx] === doc;
+                const shown = editing ? document.getElementById('editorTitleInput').value.trim() : doc.title;
+                if (shown !== autoTitle || doc.title !== autoTitle) return;
+                doc.title = `${name} ${doc.date.split(' ')[0]}`;
+                if (editing) document.getElementById('editorTitleInput').value = doc.title;
+                markDirty(doc);
+                renderAllDocLists();
+                showToast('🤖 تمت تسمية المستند: ' + name);
+            } catch (e) {
+                console.warn('auto-name', e);
+            }
         }
 
         // Additional Special Tools from Tools Screen

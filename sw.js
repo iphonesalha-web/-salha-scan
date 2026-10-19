@@ -10,7 +10,7 @@ const SHELL = [
   'icons/apple-touch-icon.png',
   'icons/icon-192.png',
   'icons/icon-512.png',
-  'vendor/app-bbbd81ed.css',
+  'vendor/app-9a73fbef.css',
   'vendor/fonts/cairo-arabic-wght-normal.woff2',
   'vendor/fonts/cairo-latin-wght-normal.woff2',
   'vendor/fonts/cairo-latin-ext-wght-normal.woff2',
