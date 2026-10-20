@@ -824,6 +824,7 @@
 
             <!-- Main tools -->
             <div class="flex items-stretch gap-0.5 overflow-x-auto no-scrollbar px-1.5 pt-2 pb-1 text-[11px] font-bold text-gray-200">
+                <button id="edBtn-textedit" onclick="toggleEditorMode('textedit')" class="ed-tool"><i class="fa-solid fa-i-cursor"></i><span>تحرير النص</span></button>
                 <button id="edBtn-crop" onclick="toggleEditorMode('crop')" class="ed-tool"><i class="fa-solid fa-crop-simple"></i><span>قص</span></button>
                 <button onclick="rotateActivePage()" class="ed-tool"><i class="fa-solid fa-rotate-right"></i><span>تدوير</span></button>
                 <button id="edBtn-filter" onclick="toggleEditorMode('filter')" class="ed-tool"><i class="fa-solid fa-wand-magic-sparkles"></i><span>فلتر</span></button>
@@ -1751,6 +1752,7 @@
                 { icon: 'fa-solid fa-i-cursor', label: 'إعادة التسمية', fn: () => { const t = document.getElementById('editorTitleInput'); t.focus(); t.select(); } },
                 { icon: 'fa-solid fa-images', label: 'إضافة صفحات من الصور أو الملفات', fn: () => document.getElementById('mergeFilesInput').click() },
                 { icon: 'fa-solid fa-file-circle-plus', label: 'إضافة صفحة فارغة', fn: async () => { addBlankPageToCurrentDoc(); await renderViewer(true); } },
+                { icon: 'fa-solid fa-i-cursor', label: 'تحرير النص في الصفحة', fn: () => openPageEditor(currentPageIdx, 'textedit') },
                 { icon: 'fa-solid fa-font', label: 'استخراج النص (بدون إنترنت)', fn: () => runOcrOnActivePage() },
                 { icon: 'fa-solid fa-lock', label: doc.locked ? 'تغيير كلمة المرور' : 'قفل بكلمة مرور', fn: () => openLockDocModal() },
                 { icon: 'fa-regular fa-trash-can', label: 'حذف المستند', danger: true, fn: () => confirmDeleteCurrentDoc() }
@@ -1821,19 +1823,20 @@
         // Modes: 'none' (just view / move text), 'pen', 'highlight', 'whiteout', 'crop', 'filter'
         function setEditorMode(mode) {
             editorMode = mode;
-            ['pen', 'highlight', 'whiteout', 'crop', 'filter'].forEach(m => {
+            ['pen', 'highlight', 'whiteout', 'crop', 'filter', 'textedit'].forEach(m => {
                 const btn = document.getElementById(`edBtn-${m}`);
                 if (btn) btn.classList.toggle('editor-tool-active', m === mode);
             });
             document.getElementById('editorSubBar-filter').classList.toggle('hidden', mode !== 'filter');
             document.getElementById('editorSubBar-pen').classList.toggle('hidden', mode !== 'pen');
             document.getElementById('editorSubBar-crop').classList.toggle('hidden', mode !== 'crop');
-            const hint = { highlight: 'مرّر إصبعك فوق النص لتظليله', whiteout: 'مرّر إصبعك لمسح أي جزء من الصفحة' }[mode];
+            const hint = { highlight: 'مرّر إصبعك فوق النص لتظليله', whiteout: 'مرّر إصبعك لمسح أي جزء من الصفحة', textedit: 'اضغط على أي سطر محدد لتعديل نصه' }[mode];
             const hb = document.getElementById('editorSubBar-hint');
             hb.textContent = hint || '';
             hb.classList.toggle('hidden', !hint);
             loupeEl.classList.add('hidden');
             renderEditorCanvas();
+            if (mode === 'textedit') enterTextEditMode();
         }
 
         function toggleEditorMode(mode) {
@@ -1878,7 +1881,9 @@
             // Draw Annotations (Strokes, Draggable Text, Stamps)
             page.annotations.forEach((ann, idx) => {
                 ctx.save();
-                if (ann.type === 'stroke') {
+                if (ann.type === 'textedit') {
+                    drawTextEditAnnotation(ctx, page, ann, w, h);
+                } else if (ann.type === 'stroke') {
                     ctx.beginPath();
                     ctx.strokeStyle = ann.color;
                     ctx.lineWidth = ann.size;
@@ -1955,6 +1960,7 @@
                 edCtx.restore();
             } else {
                 renderPageCompositeToCanvas(page, edCanvas, true);
+                if (editorMode === 'textedit') drawTextEditOverlay(edCtx, page, edCanvas.width, edCanvas.height);
             }
 
             // Update Page Pills
@@ -1995,6 +2001,12 @@
                 if (editorMode === 'crop') {
                     draggingCorner = page.cropCorners.findIndex(c => Math.hypot(c.x - pos.x, c.y - pos.y) < 0.1);
                     if (draggingCorner !== -1) e.preventDefault();
+                    return;
+                }
+
+                if (editorMode === 'textedit') {
+                    e.preventDefault();
+                    if (!textEditBusy) handleTextEditTap(pos);
                     return;
                 }
 
@@ -3231,6 +3243,195 @@
             } catch (e) {
                 console.warn('auto-name', e);
             }
+        }
+
+        // ===================================================================
+        // EDIT TEXT ON THE PAGE (CamScanner-style)
+        // Lines are found on-device (Tesseract, works offline). Editing a line
+        // paints over it with the paper colour and writes the new text in the
+        // same place, size and ink colour.
+        // ===================================================================
+        async function ocrLinesForPage(page) {
+            const src = getFilteredBase(page);
+            if (page._ocr && page._ocr.src === src && page._ocr.w === src.width) return page._ocr.lines;
+            const worker = await getOcrWorker();
+            const res = await worker.recognize(src, {}, { blocks: true, text: false, hocr: false, tsv: false });
+            const lines = [];
+            ((res && res.data && res.data.blocks) || []).forEach(b => (b.paragraphs || []).forEach(p => (p.lines || []).forEach(l => {
+                if (l.confidence < 25) return;
+                // Split a line where words are far apart (form columns: label | value)
+                const words = (l.words || []).filter(wd => (wd.text || '').trim());
+                const lh = l.bbox.y1 - l.bbox.y0;
+                const segs = [];
+                words.slice().sort((a, b) => a.bbox.x0 - b.bbox.x0).forEach(wd => {
+                    const last = segs[segs.length - 1];
+                    if (last && wd.bbox.x0 - last.x1 < lh * 1.6) {
+                        last.words.push(wd); last.x1 = Math.max(last.x1, wd.bbox.x1);
+                    } else {
+                        segs.push({ words: [wd], x1: wd.bbox.x1 });
+                    }
+                });
+                if (!segs.length) segs.push({ words: [{ text: l.text, bbox: l.bbox }] });
+                segs.forEach(sg => {
+                    const rtl = sg.words.some(wd => /[\u0600-\u06FF]/.test(wd.text));
+                    const ws = rtl ? sg.words.slice().reverse() : sg.words;
+                    const t = ws.map(wd => wd.text.trim()).join(' ').replace(/\s+/g, ' ').trim();
+                    if (!t) return;
+                    const x0 = Math.min(...sg.words.map(wd => wd.bbox.x0)), x1 = Math.max(...sg.words.map(wd => wd.bbox.x1));
+                    const y0 = Math.min(...sg.words.map(wd => wd.bbox.y0)), y1 = Math.max(...sg.words.map(wd => wd.bbox.y1));
+                    if (x1 - x0 < 6 || y1 - y0 < 5) return;
+                    lines.push({ text: t, x0: x0 / src.width, y0: y0 / src.height, x1: x1 / src.width, y1: y1 / src.height });
+                });
+            })));
+            page._ocr = { src, w: src.width, lines };
+            return lines;
+        }
+
+        let textEditBusy = false;
+        async function enterTextEditMode() {
+            const doc = docs[currentDocIdx];
+            if (!doc) return;
+            const page = doc.pages[currentPageIdx];
+            if (page._ocr && page._ocr.src === getFilteredBase(page)) { renderEditorCanvas(); return; }
+            if (textEditBusy) return;
+            textEditBusy = true;
+            showLoader('جاري التعرف على أسطر النص...');
+            try {
+                const lines = await ocrLinesForPage(page);
+                if (!lines.length) showToast('لم يتم العثور على نص مطبوع في هذه الصفحة');
+                else showToast('اضغط على أي سطر لتعديله');
+            } catch (e) {
+                console.error(e);
+                showToast('تعذر تشغيل التعرف على النص');
+            }
+            hideLoader();
+            textEditBusy = false;
+            if (editorMode === 'textedit') renderEditorCanvas();
+        }
+
+        // Paper colour (median of the border) and ink colour (darkest pixels)
+        const textEditColorCache = new WeakMap();
+        function textEditColors(page, ann) {
+            const src = getFilteredBase(page);
+            const key = src.width + 'x' + src.height + ':' + (page.filter || '') + ':' + (src === page.baseCanvas ? 'b' : 'f');
+            const cached = textEditColorCache.get(ann);
+            if (cached && cached.key === key && cached.src === src) return cached;
+            const W = src.width, H = src.height;
+            const pad = Math.max(2, Math.round((ann.y1 - ann.y0) * H * 0.15));
+            const x = Math.max(0, Math.floor(ann.x0 * W) - pad), y = Math.max(0, Math.floor(ann.y0 * H) - pad);
+            const w = Math.max(1, Math.min(W - x, Math.ceil((ann.x1 - ann.x0) * W) + pad * 2));
+            const h = Math.max(1, Math.min(H - y, Math.ceil((ann.y1 - ann.y0) * H) + pad * 2));
+            let d;
+            try { d = src.getContext('2d', { willReadFrequently: true }).getImageData(x, y, w, h).data; }
+            catch (e) { return { key, src, bg: '#ffffff', fg: '#111111' }; }
+            const rs = [], gs = [], bs = [];
+            const push = (i) => { rs.push(d[i]); gs.push(d[i + 1]); bs.push(d[i + 2]); };
+            for (let i = 0; i < w; i++) { push(i * 4); push(((h - 1) * w + i) * 4); }
+            for (let j = 0; j < h; j++) { push(j * w * 4); push((j * w + w - 1) * 4); }
+            const med = a => { a.sort((p, q) => p - q); return a[a.length >> 1] || 255; };
+            const bg = [med(rs), med(gs), med(bs)];
+            const bgL = 0.299 * bg[0] + 0.587 * bg[1] + 0.114 * bg[2];
+            let sr = 0, sg = 0, sb = 0, n = 0;
+            const lum = [];
+            for (let i = 0; i < d.length; i += 4) lum.push(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+            const sorted = lum.slice().sort((p, q) => p - q);
+            const cut = Math.min(bgL - 50, sorted[Math.floor(sorted.length * 0.08)] + 25);
+            for (let i = 0, k = 0; i < d.length; i += 4, k++) {
+                if (lum[k] <= cut) { sr += d[i]; sg += d[i + 1]; sb += d[i + 2]; n++; }
+            }
+            const hex = (r, g, b) => '#' + [r, g, b].map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
+            // Ink density inside the text box → bold or regular
+            const innerArea = Math.max(1, (ann.x1 - ann.x0) * W * (ann.y1 - ann.y0) * H);
+            const out = { key, src, bg: hex(...bg), fg: n ? hex(sr / n, sg / n, sb / n) : '#111111', density: n / innerArea };
+            textEditColorCache.set(ann, out);
+            return out;
+        }
+
+        function drawTextEditAnnotation(ctx, page, ann, w, h) {
+            const c = textEditColors(page, ann);
+            const bx = ann.x0 * w, by = ann.y0 * h, bw = (ann.x1 - ann.x0) * w, bh = (ann.y1 - ann.y0) * h;
+            const pad = Math.max(2, bh * 0.14);
+            ctx.save();
+            ctx.fillStyle = c.bg;
+            ctx.fillRect(bx - pad, by - pad, bw + pad * 2, bh + pad * 2);
+            if (ann.text) {
+                const rtl = /[؀-ۿ]/.test(ann.text);
+                const bold = ann.bold != null ? ann.bold : c.density > 0.2;
+                const family = `${rtl ? 'Cairo, ' : ''}"Helvetica Neue", Helvetica, Arial, sans-serif`;
+                const weight = bold ? 'bold ' : '';
+                // Size the font so the ORIGINAL text would exactly fill the detected box
+                const ref = ann.orig || ann.text;
+                ctx.font = `${weight}100px ${family}`;
+                const m = ctx.measureText(ref);
+                const refH = (m.actualBoundingBoxAscent + m.actualBoundingBoxDescent) || 72;
+                const size = Math.max(6, 100 * bh / refH);
+                const desc = (m.actualBoundingBoxDescent || 0) * size / 100;
+                // Match the width style of the original lettering (narrow/wide fonts)
+                const refW = m.width * size / 100;
+                const hs = ann.orig && refW > 0 ? Math.max(0.75, Math.min(1.25, bw / refW)) : 1;
+                ctx.font = `${weight}${size}px ${family}`;
+                ctx.fillStyle = c.fg;
+                ctx.textBaseline = 'alphabetic';
+                ctx.direction = rtl ? 'rtl' : 'ltr';
+                ctx.textAlign = rtl ? 'right' : 'left';
+                const tw = ctx.measureText(ann.text).width * hs;
+                // If the new text is longer than the box, squeeze it a little
+                const sx = hs * (tw > bw * 1.05 ? Math.max(0.75, bw * 1.05 / tw) : 1);
+                ctx.translate(rtl ? bx + bw : bx, by + bh - desc);
+                ctx.scale(sx, 1);
+                ctx.fillText(ann.text, 0, 0);
+            }
+            ctx.restore();
+        }
+
+        // Faint boxes showing what can be edited (editor screen only, never exported)
+        function drawTextEditOverlay(ctx, page, w, h) {
+            const lines = page._ocr && page._ocr.src === getFilteredBase(page) ? page._ocr.lines : [];
+            ctx.save();
+            ctx.lineWidth = Math.max(1.5, w / 500);
+            lines.forEach(l => {
+                const edited = page.annotations.some(a => a.type === 'textedit' && a.lineKey === lineKey(l));
+                ctx.fillStyle = edited ? 'rgba(22,160,133,0.10)' : 'rgba(45,212,191,0.13)';
+                ctx.strokeStyle = edited ? 'rgba(22,160,133,0.9)' : 'rgba(45,212,191,0.75)';
+                const x = l.x0 * w, y = l.y0 * h, bw = (l.x1 - l.x0) * w, bh = (l.y1 - l.y0) * h;
+                ctx.fillRect(x - 2, y - 2, bw + 4, bh + 4);
+                ctx.strokeRect(x - 2, y - 2, bw + 4, bh + 4);
+            });
+            ctx.restore();
+        }
+
+        const lineKey = l => [l.x0, l.y0, l.x1, l.y1].map(v => v.toFixed(4)).join(',');
+
+        function handleTextEditTap(pos) {
+            const doc = docs[currentDocIdx];
+            const page = doc.pages[currentPageIdx];
+            const inBox = (b, m = 0.006) => pos.x >= b.x0 - m && pos.x <= b.x1 + m && pos.y >= b.y0 - m * 1.5 && pos.y <= b.y1 + m * 1.5;
+            // 1) A line that was already edited
+            for (let i = page.annotations.length - 1; i >= 0; i--) {
+                const a = page.annotations[i];
+                if (a.type === 'textedit' && inBox(a)) {
+                    openCustomPrompt('تعديل النص (اتركه فارغاً لمسح السطر):', a.text, (val) => {
+                        a.text = val;
+                        renderEditorCanvas();
+                    });
+                    return;
+                }
+            }
+            // 2) A detected line
+            const lines = (page._ocr && page._ocr.lines) || [];
+            let hit = null, best = Infinity;
+            lines.forEach(l => {
+                if (!inBox(l)) return;
+                const area = (l.x1 - l.x0) * (l.y1 - l.y0);
+                if (area < best) { best = area; hit = l; }
+            });
+            if (!hit) { showToast('اضغط على أحد الأسطر المحددة'); return; }
+            openCustomPrompt('تعديل النص (اتركه فارغاً لمسح السطر):', hit.text, (val) => {
+                if (val === hit.text) return;
+                page.annotations.push({ type: 'textedit', lineKey: lineKey(hit), x0: hit.x0, y0: hit.y0, x1: hit.x1, y1: hit.y1, text: val, orig: hit.text });
+                renderEditorCanvas();
+                showToast(val ? 'تم تعديل النص ✓' : 'تم مسح السطر');
+            });
         }
 
         // Additional Special Tools from Tools Screen
