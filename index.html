@@ -17,7 +17,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 
     <!-- All libraries are bundled locally so the app works offline -->
-    <link rel="stylesheet" href="vendor/app-eb9ccd2e.css">
+    <link rel="stylesheet" href="vendor/app-c3f76ea7.css">
     <link rel="stylesheet" href="vendor/fa/css/all.min.css">
     <script src="vendor/pdf.min.js"></script>
     <script src="vendor/jspdf.umd.min.js"></script>
@@ -32,8 +32,14 @@
         .safe-top-tight { padding-top: calc(var(--sat) + 0.5rem) !important; }
         .nav-safe { bottom: calc(var(--sab) + 0.5rem) !important; }
         .pb-nav { padding-bottom: calc(var(--sab) + 7rem) !important; }
-        .toast-safe { top: calc(var(--sat) + 0.75rem) !important; }
+        .toast-safe { top: calc(var(--sat) + 4.25rem) !important; }
         input, textarea { user-select: text; -webkit-user-select: text; }
+        .ed-tool { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-width: 64px; padding: 8px 4px 6px; border-radius: 14px; flex-shrink: 0; }
+        .ed-tool i { font-size: 20px; }
+        .ed-tool:active { opacity: .6; }
+        .ed-tool.editor-tool-active { background: rgba(22,160,133,.22) !important; color: #2dd4bf !important; border-color: transparent !important; }
+        .flt-btn.is-active { background: #16a085 !important; color: #fff; }
+        .ink-btn.is-active { outline: 3px solid #2dd4bf; outline-offset: 2px; }
         * {
             box-sizing: border-box;
             -webkit-tap-highlight-color: transparent;
@@ -94,6 +100,7 @@
     <input type="file" id="importPdfInput" accept="application/pdf,image/*" multiple class="hidden">
     <input type="file" id="importImageInput" accept="image/*" multiple class="hidden">
     <input type="file" id="cameraCaptureInput" accept="image/*" capture="environment" class="hidden">
+    <input type="file" id="addPageCameraInput" accept="image/*" capture="environment" class="hidden">
     <input type="file" id="mergeFilesInput" accept="application/pdf,image/*" multiple class="hidden">
 
     <!-- MAIN SCROLLABLE SCREENS VIEWPORT -->
@@ -717,145 +724,129 @@
     </div>
 
     <!-- ===================================================================
-         FULL INTERACTIVE PDF & DOCUMENT EDITOR MODAL
+         DOCUMENT VIEWER (clean, CamScanner-style)
          =================================================================== -->
-    <div id="docEditorModal" class="hidden fixed inset-0 bg-slate-950 z-50 flex flex-col">
-        <!-- Editor Top Bar -->
-        <header class="safe-top-tight bg-slate-900 border-b border-slate-800 px-3 py-2 flex items-center justify-between gap-2 shrink-0">
-            <div class="flex items-center gap-2 min-w-0 flex-1">
-                <button onclick="closeDocEditor()" class="w-8 h-8 rounded-xl bg-slate-800 text-white flex items-center justify-center text-sm shrink-0">
-                    <i class="fa-solid fa-arrow-right"></i>
-                </button>
-                <div class="min-w-0 flex-1">
-                    <input id="editorTitleInput" type="text"
-                        class="bg-transparent text-white font-bold text-xs w-full truncate focus:outline-none border-b border-transparent focus:border-teal-400">
-                    <div id="editorPageIndicator" class="text-[10px] text-teal-400 font-bold">صفحة 1 من 1</div>
-                </div>
-            </div>
-
-            <div class="flex items-center gap-1.5 shrink-0">
-                <button onclick="confirmDeleteCurrentDoc()" class="w-8 h-8 rounded-xl bg-rose-950 text-rose-300 flex items-center justify-center text-xs" aria-label="حذف المستند">
-                    <i class="fa-solid fa-trash"></i>
-                </button>
-                <button onclick="document.getElementById('mergeFilesInput').click()" class="bg-slate-800 text-teal-300 border border-slate-700 px-2 py-1.5 rounded-xl text-[11px] font-bold">
-                    + دمج PDF/صور
-                </button>
-                <button onclick="exportDocToWord(currentDocIdx)" class="bg-blue-600 text-white px-2.5 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1">
-                    <span>To Word</span>
-                    <i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i>
-                </button>
-                <button onclick="exportCurrentDocToPDF(currentDocIdx)" class="cs-teal-bg text-white px-3 py-1.5 rounded-xl text-[11px] font-bold shadow">
-                    حفظ PDF
-                </button>
-            </div>
+    <div id="docViewer" class="hidden fixed inset-0 z-[45] bg-[#eef0f3] flex flex-col">
+        <header class="safe-top-tight bg-white border-b border-gray-200 px-2 py-2 flex items-center gap-1 shrink-0">
+            <button onclick="closeDocEditor()" class="w-10 h-10 text-gray-800 text-xl flex items-center justify-center shrink-0" aria-label="رجوع">
+                <i class="fa-solid fa-chevron-right"></i>
+            </button>
+            <input id="editorTitleInput" type="text" dir="auto"
+                class="flex-1 min-w-0 bg-transparent font-extrabold text-[16px] text-gray-900 truncate focus:outline-none border-b-2 border-dashed border-gray-300 focus:border-[#16a085] py-0.5">
+            <button onclick="openDocMenu()" class="w-10 h-10 text-gray-800 text-xl flex items-center justify-center shrink-0" aria-label="المزيد">
+                <i class="fa-solid fa-ellipsis"></i>
+            </button>
         </header>
 
-        <!-- Interactive Canvas Area -->
-        <main class="flex-1 canvas-checker relative flex flex-col items-center justify-center overflow-hidden p-2 min-h-0">
-            <div id="editorHintBanner" class="mb-1.5 px-3 py-0.5 rounded-full bg-slate-900/90 border border-slate-700 text-[10px] text-slate-300">
-                وقّع بإصبعك، أو اسحب أي نص/ختم لتغيير مكانه على الصفحة
-            </div>
+        <main id="viewerScroll" class="flex-1 overflow-y-auto no-scrollbar px-3 pt-4 pb-6">
+            <div id="viewerPages" class="space-y-4 max-w-xl mx-auto"></div>
+            <button onclick="addPageFromCamera()" class="w-full mt-5 py-3 flex items-center justify-center gap-2.5 text-gray-600 font-bold text-[15px]">
+                <span class="w-6 h-6 rounded-full bg-[#16a085] text-white flex items-center justify-center text-xs"><i class="fa-solid fa-plus"></i></span>
+                <span>استمر في إضافة الصفحات</span>
+            </button>
+        </main>
 
+        <nav class="bg-white border-t border-gray-200 grid grid-cols-5 pt-2 shrink-0 text-gray-800" style="padding-bottom: calc(var(--sab) + 0.5rem)">
+            <button onclick="addPageFromCamera()" class="flex flex-col items-center gap-1 py-1 active:opacity-60">
+                <i class="fa-solid fa-camera text-[22px]"></i><span class="text-[12px] font-bold">إضافة</span>
+            </button>
+            <button onclick="openPageEditor(currentPageIdx)" class="flex flex-col items-center gap-1 py-1 active:opacity-60">
+                <i class="fa-regular fa-pen-to-square text-[22px]"></i><span class="text-[12px] font-bold">تحرير</span>
+            </button>
+            <button onclick="openShareSheet()" class="flex flex-col items-center gap-1 py-1 active:opacity-60">
+                <i class="fa-solid fa-arrow-up-from-bracket text-[22px]"></i><span class="text-[12px] font-bold">مشاركة</span>
+            </button>
+            <button onclick="openAiSheet()" class="flex flex-col items-center gap-1 py-1 active:opacity-60 text-violet-700">
+                <i class="fa-solid fa-robot text-[22px]"></i><span class="text-[12px] font-bold">ذكاء اصطناعي</span>
+            </button>
+            <button onclick="openPageEditor(currentPageIdx, 'pen')" class="flex flex-col items-center gap-1 py-1 active:opacity-60">
+                <i class="fa-solid fa-signature text-[22px]"></i><span class="text-[12px] font-bold">التوقيع</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- ===================================================================
+         PAGE EDITOR (opens only from «تحرير» or by tapping a page)
+         =================================================================== -->
+    <div id="docEditorModal" class="hidden fixed inset-0 bg-[#111318] z-50 flex flex-col text-white">
+        <header class="safe-top-tight px-2 py-2 flex items-center justify-between gap-2 shrink-0">
+            <button onclick="closePageEditor()" class="h-9 px-4 rounded-full cs-teal-bg text-white text-[13px] font-bold flex items-center gap-1.5">
+                <i class="fa-solid fa-check"></i><span>تم</span>
+            </button>
+            <div id="editorPageIndicator" class="text-[13px] font-bold text-gray-300">صفحة 1 من 1</div>
+            <button onclick="undoEditorAnnotation()" class="h-9 px-3 rounded-full bg-white/10 text-[13px] font-bold flex items-center gap-1.5">
+                <i class="fa-solid fa-rotate-left"></i><span>تراجع</span>
+            </button>
+        </header>
+
+        <main class="flex-1 relative flex flex-col items-center justify-center overflow-hidden px-3 py-2 min-h-0">
             <div class="relative flex-1 w-full flex items-center justify-center overflow-hidden min-h-0">
-                <canvas id="editorCanvas" class="max-w-full max-h-full object-contain rounded shadow-2xl bg-white touch-none"></canvas>
-
-                <!-- Magnifier Loupe for 4-Point Perspective Crop -->
+                <canvas id="editorCanvas" class="max-w-full max-h-full object-contain shadow-2xl bg-white touch-none"></canvas>
                 <div id="editorLoupe" class="hidden absolute top-2 right-2 w-24 h-24 rounded-full border-4 border-teal-400 shadow-2xl overflow-hidden bg-slate-950 pointer-events-none z-30">
                     <canvas id="loupeCanvas" width="96" height="96" class="w-full h-full"></canvas>
                 </div>
             </div>
-
-            <!-- Selected Draggable Text/Stamp Controls -->
-            <div id="selectedAnnotationBar" class="hidden absolute bottom-2 left-1/2 -translate-x-1/2 bg-slate-900/95 border border-slate-700 px-3 py-1.5 rounded-2xl flex items-center gap-2 shadow-xl z-20">
-                <button onclick="resizeSelectedAnnotation(1.15)" class="px-2 py-1 bg-slate-800 text-white rounded-lg text-xs">➕ تكبير</button>
-                <button onclick="resizeSelectedAnnotation(0.85)" class="px-2 py-1 bg-slate-800 text-white rounded-lg text-xs">➖ تصغير</button>
-                <button onclick="deleteSelectedAnnotation()" class="px-2.5 py-1 bg-rose-600 text-white rounded-lg text-xs font-bold">🗑️ حذف</button>
+            <div id="selectedAnnotationBar" class="hidden absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1.5 rounded-2xl flex items-center gap-1.5 shadow-xl z-20 text-xs">
+                <button onclick="resizeSelectedAnnotation(1.15)" class="px-2.5 py-1 bg-white/10 rounded-lg"><i class="fa-solid fa-plus"></i></button>
+                <button onclick="resizeSelectedAnnotation(0.85)" class="px-2.5 py-1 bg-white/10 rounded-lg"><i class="fa-solid fa-minus"></i></button>
+                <button onclick="deleteSelectedAnnotation()" class="px-2.5 py-1 bg-rose-600 rounded-lg"><i class="fa-solid fa-trash"></i></button>
             </div>
         </main>
 
-        <!-- Multi-Page Strip & Page Reorder/Rotate/Extract Controls -->
-        <div class="bg-slate-900 border-t border-slate-800 px-3 py-1.5 flex items-center justify-between gap-2 shrink-0">
-            <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-1 py-0.5">
-                <div id="editorPagePills" class="flex items-center gap-1.5"></div>
-                <button onclick="addBlankPageToCurrentDoc()" class="px-2 py-1 rounded-lg bg-slate-800 text-teal-400 border border-slate-700 text-[10px] font-bold shrink-0">
-                    + صفحة
-                </button>
-            </div>
-            <div class="flex items-center gap-1 border-r border-slate-800 pr-2 shrink-0 text-white">
-                <button onclick="rotateActivePage()" class="w-7 h-7 rounded-lg bg-slate-800 text-xs" title="تدوير">🔄</button>
-                <button onclick="reorderActivePage(-1)" class="w-7 h-7 rounded-lg bg-slate-800 text-xs" title="تقديم">➡️</button>
-                <button onclick="reorderActivePage(1)" class="w-7 h-7 rounded-lg bg-slate-800 text-xs" title="تأخير">⬅️</button>
-                <button onclick="extractSinglePagePDF()" class="px-2 h-7 rounded-lg bg-slate-800 text-[10px] text-sky-300 font-bold" title="استخراج الصفحة">استخراج</button>
-                <button onclick="deleteActivePage()" class="w-7 h-7 rounded-lg bg-rose-950 text-rose-300 text-xs" title="حذف">🗑️</button>
-            </div>
+        <!-- Pages strip (only when the document has several pages) -->
+        <div id="editorPagesRow" class="hidden px-3 pb-1.5 flex items-center gap-2 shrink-0">
+            <button onclick="reorderActivePage(-1)" class="w-8 h-8 rounded-full bg-white/10 text-xs shrink-0" aria-label="تقديم الصفحة"><i class="fa-solid fa-arrow-right"></i></button>
+            <div class="flex-1 overflow-x-auto no-scrollbar"><div id="editorPagePills" class="flex items-center gap-1.5 justify-center"></div></div>
+            <button onclick="reorderActivePage(1)" class="w-8 h-8 rounded-full bg-white/10 text-xs shrink-0" aria-label="تأخير الصفحة"><i class="fa-solid fa-arrow-left"></i></button>
         </div>
 
-        <!-- Editor Bottom Tools Panel -->
-        <section class="bg-slate-950 border-t border-slate-800 px-2.5 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-white space-y-2 shrink-0">
-            <!-- Primary Tools Scroll Row -->
-            <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 text-[11px] font-bold">
-                <button id="edBtn-pen" onclick="setEditorMode('pen')" class="editor-tool-active px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 shrink-0">
-                    ✒️ التوقيع / قلم
-                </button>
-                <button id="edBtn-highlight" onclick="setEditorMode('highlight')" class="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 shrink-0">
-                    🖍️ تظليل
-                </button>
-                <button id="edBtn-whiteout" onclick="setEditorMode('whiteout')" class="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 shrink-0">
-                    🧹 المحو الذكي
-                </button>
-                <button id="edBtn-crop" onclick="setEditorMode('crop')" class="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 shrink-0">
-                    📐 قص 4 نقاط
-                </button>
-                <button onclick="openEditorTextModal()" class="px-2.5 py-1.5 rounded-xl bg-indigo-600 text-white shrink-0">
-                    🔤 إضافة نص
-                </button>
-                <button onclick="openEditorWatermarkModal()" class="px-2.5 py-1.5 rounded-xl bg-sky-700 text-white shrink-0">
-                    💮 علامة مائية
-                </button>
-                <button onclick="insertOfficialStamp()" class="px-2.5 py-1.5 rounded-xl bg-emerald-700 text-white shrink-0">
-                    ✅ ختم معتمد
-                </button>
-                <button onclick="insertTimestampAnnotation()" class="px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 shrink-0">
-                    🕒 طابع زمني
-                </button>
-                <button onclick="openAiSheet()" class="px-2.5 py-1.5 rounded-xl bg-gradient-to-l from-violet-600 to-indigo-600 text-white shrink-0">
-                    🤖 ذكاء اصطناعي
-                </button>
-                <button onclick="runOcrOnActivePage()" class="px-2.5 py-1.5 rounded-xl bg-teal-700 text-white shrink-0">
-                    🔍 استخراج نص OCR
-                </button>
-                <button onclick="undoEditorAnnotation()" class="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-amber-400 shrink-0">
-                    ↩️ تراجع
-                </button>
+        <section class="bg-[#1a1d24] border-t border-white/5 shrink-0" style="padding-bottom: calc(var(--sab) + 0.25rem)">
+            <!-- Context rows -->
+            <div id="editorSubBar-filter" class="hidden px-3 pt-2.5 flex items-center justify-center gap-2 text-[12px] font-bold">
+                <button onclick="applyPageFilter('original')" data-filter="original" class="flt-btn px-3.5 py-1.5 rounded-full bg-white/10">الأصلي</button>
+                <button onclick="applyPageFilter('magic')" data-filter="magic" class="flt-btn px-3.5 py-1.5 rounded-full bg-white/10">🪄 سحري</button>
+                <button onclick="applyPageFilter('bw')" data-filter="bw" class="flt-btn px-3.5 py-1.5 rounded-full bg-white/10">أبيض وأسود</button>
             </div>
-
-            <!-- Secondary Row: Filters OR Crop Apply OR Pen Colors -->
-            <div id="editorSubBar-default" class="flex items-center justify-between gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800 text-[11px]">
-                <div class="flex items-center gap-1.5">
-                    <span class="text-slate-400 text-[10px]">الفلتر:</span>
-                    <button onclick="applyPageFilter('magic')" class="px-2 py-0.5 rounded bg-teal-900/60 text-teal-300 border border-teal-600 font-bold">🪄 سحري</button>
-                    <button onclick="applyPageFilter('bw')" class="px-2 py-0.5 rounded bg-slate-800 text-slate-300">أبيض وأسود</button>
-                    <button onclick="applyPageFilter('original')" class="px-2 py-0.5 rounded bg-slate-800 text-slate-300">الأصلي</button>
-                </div>
-                <div class="flex items-center gap-1.5">
-                    <button onclick="setInkColor('#0f766e')" class="w-5 h-5 rounded-full bg-[#0f766e] ring-2 ring-white"></button>
-                    <button onclick="setInkColor('#1d4ed8')" class="w-5 h-5 rounded-full bg-blue-700"></button>
-                    <button onclick="setInkColor('#111827')" class="w-5 h-5 rounded-full bg-black border border-slate-500"></button>
-                    <button onclick="setInkColor('#dc2626')" class="w-5 h-5 rounded-full bg-red-600"></button>
-                </div>
+            <div id="editorSubBar-pen" class="hidden px-3 pt-2.5 flex items-center justify-center gap-3">
+                <button onclick="setInkColor('#111827')" data-ink="#111827" class="ink-btn w-7 h-7 rounded-full bg-black border-2 border-white/30"></button>
+                <button onclick="setInkColor('#1d4ed8')" data-ink="#1d4ed8" class="ink-btn w-7 h-7 rounded-full bg-blue-700 border-2 border-white/30"></button>
+                <button onclick="setInkColor('#0f766e')" data-ink="#0f766e" class="ink-btn w-7 h-7 rounded-full bg-[#0f766e] border-2 border-white/30"></button>
+                <button onclick="setInkColor('#dc2626')" data-ink="#dc2626" class="ink-btn w-7 h-7 rounded-full bg-red-600 border-2 border-white/30"></button>
             </div>
-
-            <!-- Crop Mode SubBar -->
-            <div id="editorSubBar-crop" class="hidden flex items-center justify-between gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800 text-xs">
+            <div id="editorSubBar-crop" class="hidden px-3 pt-2.5 flex items-center justify-between gap-2 text-[12px] font-bold">
                 <div class="flex items-center gap-1.5">
-                    <button onclick="autoDetectActivePage()" class="px-2.5 py-1 rounded-lg bg-slate-800 text-teal-300 border border-slate-700 font-bold text-[11px]">🪄 تلقائي</button>
-                    <button onclick="resetCropCorners()" class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 text-[11px]">الصفحة كاملة</button>
+                    <button onclick="autoDetectActivePage()" class="px-3 py-1.5 rounded-full bg-white/10 text-teal-300">🪄 تلقائي</button>
+                    <button onclick="resetCropCorners()" class="px-3 py-1.5 rounded-full bg-white/10">الصفحة كاملة</button>
                 </div>
-                <button onclick="applyPerspectiveCrop()" class="cs-teal-bg text-white px-4 py-1 rounded-lg font-bold">
-                    ✂️ تطبيق القص
-                </button>
+                <button onclick="applyPerspectiveCrop()" class="cs-teal-bg px-4 py-1.5 rounded-full">✂️ تطبيق القص</button>
+            </div>
+            <div id="editorSubBar-hint" class="hidden px-3 pt-2.5 text-center text-[11px] text-gray-400"></div>
+
+            <!-- Main tools -->
+            <div class="flex items-stretch gap-0.5 overflow-x-auto no-scrollbar px-1.5 pt-2 pb-1 text-[11px] font-bold text-gray-200">
+                <button id="edBtn-crop" onclick="toggleEditorMode('crop')" class="ed-tool"><i class="fa-solid fa-crop-simple"></i><span>قص</span></button>
+                <button onclick="rotateActivePage()" class="ed-tool"><i class="fa-solid fa-rotate-right"></i><span>تدوير</span></button>
+                <button id="edBtn-filter" onclick="toggleEditorMode('filter')" class="ed-tool"><i class="fa-solid fa-wand-magic-sparkles"></i><span>فلتر</span></button>
+                <button id="edBtn-pen" onclick="toggleEditorMode('pen')" class="ed-tool"><i class="fa-solid fa-signature"></i><span>توقيع</span></button>
+                <button id="edBtn-highlight" onclick="toggleEditorMode('highlight')" class="ed-tool"><i class="fa-solid fa-highlighter"></i><span>تظليل</span></button>
+                <button id="edBtn-whiteout" onclick="toggleEditorMode('whiteout')" class="ed-tool"><i class="fa-solid fa-eraser"></i><span>محو</span></button>
+                <button onclick="openEditorTextModal()" class="ed-tool"><i class="fa-solid fa-font"></i><span>نص</span></button>
+                <button onclick="insertOfficialStamp()" class="ed-tool"><i class="fa-solid fa-stamp"></i><span>ختم</span></button>
+                <button onclick="openEditorWatermarkModal()" class="ed-tool"><i class="fa-solid fa-droplet"></i><span>علامة مائية</span></button>
+                <button onclick="insertTimestampAnnotation()" class="ed-tool"><i class="fa-regular fa-clock"></i><span>التاريخ</span></button>
+                <button onclick="confirmDeleteActivePage()" class="ed-tool text-rose-400"><i class="fa-regular fa-trash-can"></i><span>حذف الصفحة</span></button>
             </div>
         </section>
+    </div>
+
+    <!-- Generic action sheet (share options, document menu) -->
+    <div id="actionSheet" class="hidden fixed inset-0 z-50 bg-black/50 flex items-end justify-center" onclick="if(event.target===this)closeActionSheet()">
+        <div class="bg-white rounded-t-3xl w-full max-w-md p-3" style="padding-bottom: calc(var(--sab) + 0.75rem)">
+            <div class="w-10 h-1 rounded-full bg-gray-300 mx-auto mb-2"></div>
+            <h3 id="actionSheetTitle" class="text-center text-[13px] font-bold text-gray-500 mb-1"></h3>
+            <div id="actionSheetItems" class="divide-y divide-gray-100"></div>
+            <button onclick="closeActionSheet()" class="w-full mt-2 py-3 rounded-2xl bg-gray-100 text-gray-700 text-sm font-bold">إلغاء</button>
+        </div>
     </div>
 
     <!-- ===================================================================
@@ -1006,7 +997,7 @@
         let currentDocIdx = 0;
         let currentPageIdx = 0;
         let editorMode = 'pen'; // 'pen' | 'highlight' | 'whiteout' | 'crop'
-        let inkColor = '#0f766e';
+        let inkColor = '#1d4ed8';
         let editorOpen = false;
         const unlockedThisSession = new Set();
 
@@ -1514,9 +1505,10 @@
                             doc.pages.push(...importedPages);
                             currentPageIdx = doc.pages.length - 1;
                             selectedAnnIdx = -1;
-                            renderEditorCanvas();
                             markDirty(doc);
-                            showToast(`تم دمج ${importedPages.length} صفحات في المستند`);
+                            if (pageEditorOpen()) renderEditorCanvas();
+                            else await renderViewer(true);
+                            showToast(importedPages.length === 1 ? 'تمت إضافة الصفحة' : `تمت إضافة ${importedPages.length} صفحات`);
                         } else {
                             const stamp = nowStamp();
                             // iPhone camera photos are always called "image.jpg" — use a dated name instead
@@ -1556,6 +1548,8 @@
             imgInput.addEventListener('change', e => { processFiles(e.target.files, false); imgInput.value = ''; });
             camInput.addEventListener('change', e => { processFiles(e.target.files, false); camInput.value = ''; });
             mergeInput.addEventListener('change', e => { processFiles(e.target.files, true); mergeInput.value = ''; });
+            const addCam = document.getElementById('addPageCameraInput');
+            addCam.addEventListener('change', e => { processFiles(e.target.files, true); addCam.value = ''; });
         }
 
         function createPageObj(canvas, defaultFilter) {
@@ -1617,16 +1611,166 @@
             currentPageIdx = 0;
             selectedAnnIdx = -1;
             editorOpen = true;
+            editorMode = 'none';
             document.getElementById('editorTitleInput').value = doc.title;
-            document.getElementById('docEditorModal').classList.remove('hidden');
-            setEditorMode('pen');
-            renderEditorCanvas();
+            document.getElementById('docEditorModal').classList.add('hidden');
+            document.getElementById('docViewer').classList.remove('hidden');
+            document.getElementById('viewerScroll').scrollTop = 0;
+            await renderViewer();
             return true;
+        }
+
+        function pageEditorOpen() {
+            return !document.getElementById('docEditorModal').classList.contains('hidden');
+        }
+
+        // Open the editing tools for one page
+        function openPageEditor(pageIdx, mode) {
+            const doc = docs[currentDocIdx];
+            if (!doc || !editorOpen) return;
+            currentPageIdx = Math.max(0, Math.min(doc.pages.length - 1, pageIdx || 0));
+            selectedAnnIdx = -1;
+            document.getElementById('docEditorModal').classList.remove('hidden');
+            setEditorMode(mode || 'none');
+            if (mode === 'pen') showToast('وقّع بإصبعك على الصفحة');
+        }
+
+        async function closePageEditor() {
+            document.getElementById('docEditorModal').classList.add('hidden');
+            editorMode = 'none';
+            selectedAnnIdx = -1;
+            const keepPage = currentPageIdx;
+            await renderViewer();
+            scrollViewerToPage(keepPage);
+        }
+
+        // ---------- Clean document viewer ----------
+        let viewerUrls = [];
+        async function renderViewer(scrollToEnd = false) {
+            const doc = docs[currentDocIdx];
+            const wrap = document.getElementById('viewerPages');
+            viewerUrls.forEach(u => URL.revokeObjectURL(u));
+            viewerUrls = [];
+            wrap.innerHTML = '';
+            if (!doc) return;
+            const n = doc.pages.length;
+            const items = doc.pages.map((p, i) => {
+                const card = document.createElement('div');
+                card.className = 'viewer-page relative bg-white shadow-md cursor-pointer active:opacity-80';
+                card.dataset.idx = i;
+                const bw = p.baseCanvas ? p.baseCanvas.width : 3, bh = p.baseCanvas ? p.baseCanvas.height : 4;
+                card.style.aspectRatio = `${bw} / ${bh}`;
+                const img = new Image();
+                img.className = 'w-full h-full block';
+                img.alt = '';
+                card.appendChild(img);
+                if (n > 1) {
+                    const badge = document.createElement('span');
+                    badge.className = 'absolute bottom-2 left-2 text-[11px] font-bold bg-black/55 text-white rounded-md px-1.5 py-0.5';
+                    badge.textContent = `${i + 1}/${n}`;
+                    card.appendChild(badge);
+                }
+                card.onclick = () => openPageEditor(i);
+                wrap.appendChild(card);
+                return { p, img };
+            });
+            if (scrollToEnd) {
+                const sc = document.getElementById('viewerScroll');
+                setTimeout(() => sc.scrollTo({ top: sc.scrollHeight, behavior: 'smooth' }), 50);
+            }
+            for (const { p, img } of items) {
+                if (!p.baseCanvas) continue;
+                const c = document.createElement('canvas');
+                renderPageCompositeToCanvas(p, c, false);
+                const blob = await canvasToBlob(c, 'image/jpeg', 0.85);
+                c.width = c.height = 0;
+                if (!blob) continue;
+                const u = URL.createObjectURL(blob);
+                viewerUrls.push(u);
+                img.src = u;
+                await new Promise(r => setTimeout(r, 0));
+            }
+        }
+
+        function scrollViewerToPage(idx) {
+            const el = document.querySelector(`#viewerPages .viewer-page[data-idx="${idx}"]`);
+            if (el) el.scrollIntoView({ block: 'start' });
+        }
+
+        // Track which page is on screen (used by تحرير / التوقيع)
+        document.getElementById('viewerScroll').addEventListener('scroll', () => {
+            if (pageEditorOpen()) return;
+            const sc = document.getElementById('viewerScroll');
+            const mid = sc.getBoundingClientRect().top + sc.clientHeight / 3;
+            let best = 0, bestD = Infinity;
+            document.querySelectorAll('#viewerPages .viewer-page').forEach(el => {
+                const r = el.getBoundingClientRect();
+                const d = r.top <= mid && r.bottom >= mid ? 0 : Math.min(Math.abs(r.top - mid), Math.abs(r.bottom - mid));
+                if (d < bestD) { bestD = d; best = +el.dataset.idx; }
+            });
+            currentPageIdx = best;
+        }, { passive: true });
+
+        function addPageFromCamera() {
+            document.getElementById('addPageCameraInput').click();
+        }
+
+        // ---------- Action sheets ----------
+        function openActionSheet(title, items) {
+            document.getElementById('actionSheetTitle').textContent = title || '';
+            const box = document.getElementById('actionSheetItems');
+            box.innerHTML = '';
+            items.forEach(it => {
+                const b = document.createElement('button');
+                b.className = 'w-full flex items-center gap-3.5 px-3 py-3.5 text-[15px] font-bold text-right ' + (it.danger ? 'text-rose-600' : 'text-gray-800');
+                b.innerHTML = `<i class="${it.icon} w-6 text-center text-lg ${it.danger ? '' : 'text-[#16a085]'}"></i><span></span>`;
+                b.querySelector('span').textContent = it.label;
+                b.onclick = () => { closeActionSheet(); setTimeout(it.fn, 50); };
+                box.appendChild(b);
+            });
+            document.getElementById('actionSheet').classList.remove('hidden');
+        }
+        function closeActionSheet() { document.getElementById('actionSheet').classList.add('hidden'); }
+
+        function openShareSheet() {
+            const multi = (docs[currentDocIdx]?.pages.length || 0) > 1;
+            openActionSheet('مشاركة المستند', [
+                { icon: 'fa-solid fa-file-pdf', label: 'ملف PDF', fn: () => exportCurrentDocToPDF(currentDocIdx) },
+                { icon: 'fa-solid fa-image', label: multi ? 'صورة JPG (الصفحة الحالية)' : 'صورة JPG', fn: () => exportDocAsJpgImages(currentDocIdx) },
+                ...(multi ? [{ icon: 'fa-solid fa-panorama', label: 'صورة طويلة (كل الصفحات)', fn: () => exportDocAsLongImage(currentDocIdx) }] : []),
+                { icon: 'fa-solid fa-file-word', label: 'ملف Word', fn: () => exportDocToWord(currentDocIdx) },
+                { icon: 'fa-solid fa-compress', label: 'PDF مضغوط (حجم أصغر)', fn: () => exportCurrentDocToPDF(currentDocIdx, { compress: true }) },
+                { icon: 'fa-solid fa-print', label: 'طباعة', fn: () => window.print() }
+            ]);
+        }
+
+        function openDocMenu() {
+            const doc = docs[currentDocIdx];
+            if (!doc) return;
+            openActionSheet(doc.title, [
+                { icon: 'fa-solid fa-i-cursor', label: 'إعادة التسمية', fn: () => { const t = document.getElementById('editorTitleInput'); t.focus(); t.select(); } },
+                { icon: 'fa-solid fa-images', label: 'إضافة صفحات من الصور أو الملفات', fn: () => document.getElementById('mergeFilesInput').click() },
+                { icon: 'fa-solid fa-file-circle-plus', label: 'إضافة صفحة فارغة', fn: async () => { addBlankPageToCurrentDoc(); await renderViewer(true); } },
+                { icon: 'fa-solid fa-font', label: 'استخراج النص (بدون إنترنت)', fn: () => runOcrOnActivePage() },
+                { icon: 'fa-solid fa-lock', label: doc.locked ? 'تغيير كلمة المرور' : 'قفل بكلمة مرور', fn: () => openLockDocModal() },
+                { icon: 'fa-regular fa-trash-can', label: 'حذف المستند', danger: true, fn: () => confirmDeleteCurrentDoc() }
+            ]);
+        }
+
+        function confirmDeleteActivePage() {
+            const doc = docs[currentDocIdx];
+            if (!doc) return;
+            if (doc.pages.length <= 1) { showToast('لا يمكن حذف الصفحة الوحيدة — احذف المستند من قائمة ⋯'); return; }
+            openConfirm(`حذف الصفحة ${currentPageIdx + 1}؟`, () => deleteActivePage());
         }
 
         async function closeDocEditor() {
             const doc = docs[currentDocIdx];
             document.getElementById('docEditorModal').classList.add('hidden');
+            document.getElementById('docViewer').classList.add('hidden');
+            viewerUrls.forEach(u => URL.revokeObjectURL(u));
+            viewerUrls = [];
+            document.getElementById('viewerPages').innerHTML = '';
             editorOpen = false;
             if (doc) {
                 doc.title = document.getElementById('editorTitleInput').value.trim() || doc.title;
@@ -1661,45 +1805,51 @@
             }
             if (!(await openDocEditor(docIdx))) return;
             setTimeout(() => {
-                if (toolName === 'sign') setEditorMode('pen');
-                else if (toolName === 'whiteout') setEditorMode('whiteout');
-                else if (toolName === 'watermark') openEditorWatermarkModal();
-                else if (toolName === 'timestamp') insertTimestampAnnotation();
-                else if (toolName === 'magic') applyPageFilter('magic');
+                if (toolName === 'sign') openPageEditor(0, 'pen');
+                else if (toolName === 'whiteout') openPageEditor(0, 'whiteout');
+                else if (toolName === 'watermark') { openPageEditor(0); openEditorWatermarkModal(); }
+                else if (toolName === 'timestamp') { openPageEditor(0); insertTimestampAnnotation(); }
+                else if (toolName === 'magic') openPageEditor(0, 'filter');
                 else if (toolName === 'ocr') runOcrOnActivePage();
                 else if (toolName === 'ai') openAiSheet();
                 else if (toolName === 'translate') openAiSheet('translate');
                 else if (toolName === 'extractPages') extractSinglePagePDF();
-                else if (toolName === 'reorder') showToast('استخدم أزرار الأسهم ⬅️ ➡️ بالأسفل لإعادة ترتيب الصفحات');
+                else if (toolName === 'reorder') { openPageEditor(0); showToast('استخدم الأسهم بجانب أرقام الصفحات لإعادة الترتيب'); }
             }, 150);
         }
 
+        // Modes: 'none' (just view / move text), 'pen', 'highlight', 'whiteout', 'crop', 'filter'
         function setEditorMode(mode) {
             editorMode = mode;
-            ['pen', 'highlight', 'whiteout', 'crop'].forEach(m => {
+            ['pen', 'highlight', 'whiteout', 'crop', 'filter'].forEach(m => {
                 const btn = document.getElementById(`edBtn-${m}`);
-                if (btn) {
-                    if (m === mode) btn.classList.add('editor-tool-active');
-                    else btn.classList.remove('editor-tool-active');
-                }
+                if (btn) btn.classList.toggle('editor-tool-active', m === mode);
             });
-            document.getElementById('editorSubBar-default').classList.toggle('hidden', mode === 'crop');
+            document.getElementById('editorSubBar-filter').classList.toggle('hidden', mode !== 'filter');
+            document.getElementById('editorSubBar-pen').classList.toggle('hidden', mode !== 'pen');
             document.getElementById('editorSubBar-crop').classList.toggle('hidden', mode !== 'crop');
+            const hint = { highlight: 'مرّر إصبعك فوق النص لتظليله', whiteout: 'مرّر إصبعك لمسح أي جزء من الصفحة' }[mode];
+            const hb = document.getElementById('editorSubBar-hint');
+            hb.textContent = hint || '';
+            hb.classList.toggle('hidden', !hint);
             loupeEl.classList.add('hidden');
             renderEditorCanvas();
         }
 
+        function toggleEditorMode(mode) {
+            setEditorMode(editorMode === mode ? 'none' : mode);
+        }
+
         function setInkColor(c) {
             inkColor = c;
-            if (editorMode === 'whiteout' || editorMode === 'crop') setEditorMode('pen');
-            showToast('تم تغيير لون القلم والتوقيع');
+            if (editorMode !== 'pen') setEditorMode('pen');
+            else renderEditorCanvas();
         }
 
         function applyPageFilter(filterType) {
             const page = docs[currentDocIdx].pages[currentPageIdx];
             page.filter = filterType;
             renderEditorCanvas();
-            showToast('تم تطبيق الفلتر على الصفحة');
         }
 
         function renderPageCompositeToCanvas(page, targetCanvas, showSelectionBox = false) {
@@ -1811,10 +1961,13 @@
             document.getElementById('editorPageIndicator').textContent = `صفحة ${currentPageIdx + 1} من ${doc.pages.length}`;
             const pills = document.getElementById('editorPagePills');
             pills.innerHTML = '';
+            document.getElementById('editorPagesRow').classList.toggle('hidden', doc.pages.length < 2);
+            document.querySelectorAll('.flt-btn').forEach(b => b.classList.toggle('is-active', b.dataset.filter === page.filter));
+            document.querySelectorAll('.ink-btn').forEach(b => b.classList.toggle('is-active', b.dataset.ink === inkColor));
             doc.pages.forEach((p, idx) => {
                 const b = document.createElement('button');
-                b.className = `px-2.5 py-1 rounded-lg text-[10px] font-bold shrink-0 ${idx === currentPageIdx ? 'cs-teal-bg text-white' : 'bg-slate-800 text-slate-400'}`;
-                b.textContent = `ص ${idx + 1}`;
+                b.className = `w-8 h-8 rounded-full text-[12px] font-bold shrink-0 ${idx === currentPageIdx ? 'cs-teal-bg text-white' : 'bg-white/10 text-gray-300'}`;
+                b.textContent = `${idx + 1}`;
                 b.onclick = () => { currentPageIdx = idx; selectedAnnIdx = -1; renderEditorCanvas(); };
                 pills.appendChild(b);
             });
@@ -1858,6 +2011,10 @@
                 }
 
                 selectedAnnIdx = -1;
+                if (!['pen', 'highlight', 'whiteout'].includes(editorMode)) {
+                    renderEditorCanvas();
+                    return;
+                }
                 isDrawing = true;
                 e.preventDefault();
 
@@ -2418,8 +2575,8 @@
         function applyPerspectiveCrop() {
             const page = docs[currentDocIdx].pages[currentPageIdx];
             page.baseCanvas = deskewCanvas(warpPerspective(page.rawCanvas, page.cropCorners));
-            setEditorMode('pen');
-            showToast('تم قص وتسطيح المستند بنجاح');
+            setEditorMode('none');
+            showToast('تم القص بنجاح');
         }
 
         function autoDetectActivePage() {
@@ -3163,6 +3320,7 @@
             if (!doc) return;
             openConfirm(`حذف المستند «${doc.title}» نهائياً؟`, async () => {
                 document.getElementById('docEditorModal').classList.add('hidden');
+                document.getElementById('docViewer').classList.add('hidden');
                 editorOpen = false;
                 dirtyDocs.delete(doc);
                 releaseDoc(doc);
