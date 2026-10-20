@@ -17,7 +17,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 
     <!-- All libraries are bundled locally so the app works offline -->
-    <link rel="stylesheet" href="vendor/app-c3f76ea7.css">
+    <link rel="stylesheet" href="vendor/app-78dbd9d4.css">
     <link rel="stylesheet" href="vendor/fa/css/all.min.css">
     <script src="vendor/pdf.min.js"></script>
     <script src="vendor/jspdf.umd.min.js"></script>
@@ -786,6 +786,9 @@
                     <canvas id="loupeCanvas" width="96" height="96" class="w-full h-full"></canvas>
                 </div>
             </div>
+            <button id="zoomResetBtn" onclick="resetZoom()" class="hidden absolute top-2 left-3 z-20 px-3 py-1.5 rounded-full bg-black/75 text-white text-xs font-bold flex items-center gap-1.5">
+                <i class="fa-solid fa-magnifying-glass-minus"></i><span>الحجم الأصلي</span>
+            </button>
             <div id="selectedAnnotationBar" class="hidden absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1.5 rounded-2xl flex items-center gap-1.5 shadow-xl z-20 text-xs">
                 <button onclick="resizeSelectedAnnotation(1.15)" class="px-2.5 py-1 bg-white/10 rounded-lg"><i class="fa-solid fa-plus"></i></button>
                 <button onclick="resizeSelectedAnnotation(0.85)" class="px-2.5 py-1 bg-white/10 rounded-lg"><i class="fa-solid fa-minus"></i></button>
@@ -1632,8 +1635,10 @@
             currentPageIdx = Math.max(0, Math.min(doc.pages.length - 1, pageIdx || 0));
             selectedAnnIdx = -1;
             document.getElementById('docEditorModal').classList.remove('hidden');
+            resetZoom();
             setEditorMode(mode || 'none');
-            if (mode === 'pen') showToast('وقّع بإصبعك على الصفحة');
+            if (mode === 'pen') showToast('وقّع بإصبعك — وكبّر بإصبعين');
+            else if (lsGet('salha_zoom_tip') !== '1') { lsSet('salha_zoom_tip', '1'); setTimeout(() => showToast('🔍 كبّر الصفحة بإصبعين، أو اضغط مرتين'), 400); }
         }
 
         async function closePageEditor() {
@@ -1830,7 +1835,7 @@
             document.getElementById('editorSubBar-filter').classList.toggle('hidden', mode !== 'filter');
             document.getElementById('editorSubBar-pen').classList.toggle('hidden', mode !== 'pen');
             document.getElementById('editorSubBar-crop').classList.toggle('hidden', mode !== 'crop');
-            const hint = { highlight: 'مرّر إصبعك فوق النص لتظليله', whiteout: 'مرّر إصبعك لمسح أي جزء من الصفحة', textedit: 'اضغط على أي سطر محدد لتعديل نصه' }[mode];
+            const hint = { highlight: 'مرّر إصبعك فوق النص لتظليله', whiteout: 'مرّر إصبعك لمسح أي جزء من الصفحة', textedit: 'اضغط على أي سطر لتعديله — كبّر بإصبعين لرؤية التفاصيل' }[mode];
             const hb = document.getElementById('editorSubBar-hint');
             hb.textContent = hint || '';
             hb.classList.toggle('hidden', !hint);
@@ -1930,6 +1935,7 @@
             const doc = docs[currentDocIdx];
             if (!doc) return;
             const page = doc.pages[currentPageIdx];
+            const prevSize = edCanvas.width + 'x' + edCanvas.height;
 
             if (editorMode === 'crop') {
                 const raw = page.rawCanvas;
@@ -1979,6 +1985,8 @@
             });
 
             document.getElementById('selectedAnnotationBar').classList.toggle('hidden', selectedAnnIdx === -1);
+            const zk = currentDocIdx + ':' + currentPageIdx + ':' + edCanvas.width + 'x' + edCanvas.height;
+            if (zk !== zoomKey || prevSize !== edCanvas.width + 'x' + edCanvas.height) { zoomKey = zk; resetZoom(); }
             if (editorOpen) markDirty(doc);
         }
 
@@ -2004,11 +2012,7 @@
                     return;
                 }
 
-                if (editorMode === 'textedit') {
-                    e.preventDefault();
-                    if (!textEditBusy) handleTextEditTap(pos);
-                    return;
-                }
+                if (editorMode === 'textedit') return;
 
                 // Check draggable text/stamp first
                 for (let i = page.annotations.length - 1; i >= 0; i--) {
@@ -2092,14 +2096,144 @@
                 loupeEl.classList.add('hidden');
             };
 
-            edCanvas.addEventListener('mousedown', onDown);
-            window.addEventListener('mousemove', onMove);
-            window.addEventListener('mouseup', onUp);
+            // ---------- Gestures: pinch-zoom, pan, tap, double-tap ----------
+            const posFromClient = (cx, cy) => {
+                const r = edCanvas.getBoundingClientRect();
+                return { x: Math.max(0, Math.min(1, (cx - r.left) / r.width)), y: Math.max(0, Math.min(1, (cy - r.top) / r.height)) };
+            };
+            const drawingMode = () => ['pen', 'highlight', 'whiteout'].includes(editorMode);
+            let pinch = null, pan = null, tap = null, lastTap = null;
 
-            edCanvas.addEventListener('touchstart', onDown, { passive: false });
-            window.addEventListener('touchmove', onMove, { passive: false });
-            window.addEventListener('touchend', onUp);
+            const handleTap = (cx, cy) => {
+                const now = Date.now();
+                const isDouble = lastTap && now - lastTap.t < 320 && Math.hypot(cx - lastTap.x, cy - lastTap.y) < 30;
+                lastTap = { x: cx, y: cy, t: now };
+                if (editorMode === 'textedit') {
+                    if (!textEditBusy) handleTextEditTap(posFromClient(cx, cy));
+                    return;
+                }
+                if (isDouble && !drawingMode() && editorMode !== 'crop') {
+                    lastTap = null;
+                    if (zoom.s > 1.05) resetZoom(); else zoomAt(cx, cy, 2.5);
+                }
+            };
+
+            edCanvas.addEventListener('touchstart', (e) => {
+                if (!pageEditorOpen()) return;
+                e.preventDefault();
+                if (e.touches.length >= 2) {
+                    // Second finger: cancel what the first finger started and pinch instead
+                    if (activeStroke) {
+                        const page = docs[currentDocIdx].pages[currentPageIdx];
+                        const i = page.annotations.indexOf(activeStroke);
+                        if (i !== -1 && activeStroke.points.length < 12) page.annotations.splice(i, 1);
+                    }
+                    isDrawing = false; activeStroke = null; draggingAnnIdx = -1; draggingCorner = -1; pan = null; tap = null;
+                    loupeEl.classList.add('hidden');
+                    const [a, b] = [e.touches[0], e.touches[1]];
+                    pinch = {
+                        d0: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1,
+                        mx0: (a.clientX + b.clientX) / 2, my0: (a.clientY + b.clientY) / 2,
+                        s0: zoom.s, tx0: zoom.tx, ty0: zoom.ty, L: zoomLayout()
+                    };
+                    renderEditorCanvas();
+                    return;
+                }
+                const t = e.touches[0];
+                tap = { x: t.clientX, y: t.clientY, t: Date.now(), moved: false };
+                if (editorMode !== 'textedit') onDown(e);
+                const busy = isDrawing || draggingAnnIdx !== -1 || draggingCorner !== -1;
+                if (!busy && zoom.s > 1.01) pan = { x0: t.clientX, y0: t.clientY, tx0: zoom.tx, ty0: zoom.ty };
+            }, { passive: false });
+
+            window.addEventListener('touchmove', (e) => {
+                if (pinch && e.touches.length >= 2) {
+                    e.preventDefault();
+                    const [a, b] = [e.touches[0], e.touches[1]];
+                    const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+                    const mx = (a.clientX + b.clientX) / 2, my = (a.clientY + b.clientY) / 2;
+                    const s = Math.max(1, Math.min(6, pinch.s0 * d / pinch.d0));
+                    const ux = (pinch.mx0 - pinch.L.left - pinch.tx0) / pinch.s0;
+                    const uy = (pinch.my0 - pinch.L.top - pinch.ty0) / pinch.s0;
+                    zoom.s = s;
+                    zoom.tx = mx - pinch.L.left - s * ux;
+                    zoom.ty = my - pinch.L.top - s * uy;
+                    clampZoom(pinch.L); applyZoom();
+                    return;
+                }
+                if (pinch) return;
+                const t = e.touches[0];
+                if (tap && t && Math.hypot(t.clientX - tap.x, t.clientY - tap.y) > 10) tap.moved = true;
+                if (pan && t) {
+                    e.preventDefault();
+                    zoom.tx = pan.tx0 + (t.clientX - pan.x0);
+                    zoom.ty = pan.ty0 + (t.clientY - pan.y0);
+                    clampZoom(zoomLayout()); applyZoom();
+                    return;
+                }
+                onMove(e);
+            }, { passive: false });
+
+            window.addEventListener('touchend', (e) => {
+                if (pinch) {
+                    if (e.touches.length < 2) pinch = null;
+                    if (!e.touches.length) onUp();
+                    return;
+                }
+                pan = null;
+                if (tap && !tap.moved && Date.now() - tap.t < 400 && pageEditorOpen()) handleTap(tap.x, tap.y);
+                tap = null;
+                onUp();
+            });
+
+            // Mouse (desktop) + trackpad/wheel zoom
+            edCanvas.addEventListener('mousedown', (e) => {
+                tap = { x: e.clientX, y: e.clientY, t: Date.now(), moved: false };
+                if (editorMode !== 'textedit') onDown(e);
+            });
+            window.addEventListener('mousemove', (e) => {
+                if (tap && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) > 10) tap.moved = true;
+                onMove(e);
+            });
+            window.addEventListener('mouseup', () => {
+                if (tap && !tap.moved && pageEditorOpen()) handleTap(tap.x, tap.y);
+                tap = null;
+                onUp();
+            });
+            edCanvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                zoomAt(e.clientX, e.clientY, zoom.s * (e.deltaY < 0 ? 1.15 : 1 / 1.15));
+            }, { passive: false });
         }
+
+        // ---------- Zoom state for the page editor ----------
+        const zoom = { s: 1, tx: 0, ty: 0 };
+        let zoomKey = '';
+        function zoomLayout() {
+            const r = edCanvas.getBoundingClientRect();
+            return { left: r.left - zoom.tx, top: r.top - zoom.ty, w: r.width / zoom.s, h: r.height / zoom.s };
+        }
+        function clampZoom(L) {
+            zoom.s = Math.max(1, Math.min(6, zoom.s));
+            zoom.tx = Math.min(0, Math.max(L.w - zoom.s * L.w, zoom.tx));
+            zoom.ty = Math.min(0, Math.max(L.h - zoom.s * L.h, zoom.ty));
+        }
+        function applyZoom() {
+            const z = zoom.s > 1.001;
+            if (!z) { zoom.s = 1; zoom.tx = 0; zoom.ty = 0; }
+            edCanvas.style.transformOrigin = '0 0';
+            edCanvas.style.transform = z ? `translate(${zoom.tx}px, ${zoom.ty}px) scale(${zoom.s})` : '';
+            document.getElementById('zoomResetBtn').classList.toggle('hidden', !z);
+        }
+        function zoomAt(cx, cy, s) {
+            const L = zoomLayout();
+            const ux = (cx - L.left - zoom.tx) / zoom.s, uy = (cy - L.top - zoom.ty) / zoom.s;
+            zoom.s = Math.max(1, Math.min(6, s));
+            zoom.tx = cx - L.left - zoom.s * ux;
+            zoom.ty = cy - L.top - zoom.s * uy;
+            clampZoom(L); applyZoom();
+        }
+        function resetZoom() { zoom.s = 1; zoom.tx = 0; zoom.ty = 0; applyZoom(); }
 
         // ===================================================================
         // AUTOMATIC DOCUMENT DETECTION + PERSPECTIVE CORRECTION
