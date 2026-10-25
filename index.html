@@ -694,6 +694,17 @@
             </div>
 
             <div class="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 space-y-3 text-xs">
+                <label class="block font-bold text-gray-600">الفلتر التلقائي بعد المسح
+                    <select id="scFilterSel" onchange="scSetDefaultFilter(this.value)" class="mt-1 w-full bg-gray-100 border border-gray-200 rounded-xl px-3 py-2.5 text-xs text-gray-900">
+                        <option value="bw">أبيض وأسود (مثل CamScanner)</option>
+                        <option value="magic">سحري (ألوان، ورقة بيضاء)</option>
+                        <option value="original">الأصلي (بدون فلتر)</option>
+                    </select>
+                </label>
+                <p class="text-[11px] text-gray-500">يمكنك تغييره لأي صفحة لاحقاً من «فلتر» داخل المستند.</p>
+            </div>
+
+            <div class="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 space-y-3 text-xs">
                 <div class="flex items-center gap-2">
                     <div class="w-9 h-9 rounded-xl bg-sky-50 text-sky-500 flex items-center justify-center"><i class="fa-brands fa-google-drive"></i></div>
                     <h3 class="font-black text-sm text-gray-900">النسخ الاحتياطي في Google Drive</h3>
@@ -1047,9 +1058,10 @@
             <button class="sc-ibtn" onclick="scCancel()" aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button>
             <div class="sc-row">
                 <span id="scRes" style="font-size:11px;font-weight:800;opacity:.7" dir="ltr"></span>
+                <button id="scFilterBtn" class="sc-pill" onclick="scCycleFilter()">◐ أبيض وأسود</button>
                 <button id="scAutoBtn" class="sc-pill on" onclick="scToggleAuto()">⚡ تلقائي</button>
                 <button id="scTorch" class="sc-ibtn" onclick="scToggleTorch()" aria-label="الفلاش" style="display:none"><i class="fa-solid fa-lightbulb"></i></button>
-                <button id="scNativeBtn" class="sc-pill" onclick="scUseNative()">كاميرا الآيفون</button>
+                <button id="scNativeBtn" class="sc-ibtn" onclick="scUseNative()" aria-label="كاميرا الآيفون" title="كاميرا الآيفون (أعلى دقة)"><i class="fa-solid fa-camera"></i></button>
             </div>
         </div>
         <div class="sc-stage">
@@ -1390,6 +1402,7 @@
             }
             try { aiShowSettings(); } catch (e) { console.error(e); }
             try { gdInit(); } catch (e) { console.error(e); }
+            try { scFilterUI(); } catch (e) { console.error(e); }
             customFolders.forEach(name => renderFolderTile(name));
             renderAllDocLists();
             updateStorageInfo();
@@ -1599,7 +1612,7 @@
                             c.width = Math.round(img.width * scale);
                             c.height = Math.round(img.height * scale);
                             c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-                            const pg = createPageObj(c, 'magic');
+                            const pg = createPageObj(c, scDefaultFilter());
                             if (autoCropPage(pg)) detectedCount++;
                             else pg.baseCanvas = deskewCanvas(pg.baseCanvas); // paper fills photo: just straighten
                             importedPages.push(pg);
@@ -2997,7 +3010,7 @@
                     const idx = fromEnd ? len - 1 - k : k;
                     if (lineDirty(horizontal, idx)) { last = k; clean = 0; }
                     else if (last >= 0 && ++clean >= 4) break;
-                    else if (last < 0 && k >= 2) break; // first lines clean → nothing to trim
+                    else if (last < 0 && k >= Math.max(2, Math.round(len * 0.015))) break; // no dirt near the edge
                 }
                 return last + 1;
             };
@@ -3079,6 +3092,12 @@
             const d = imgData.data;
             if (page.filter === 'bw') {
                 documentBW(d, w, h);
+                // tiny table remnants on the outermost edge → white (text never sits that close)
+                const m = Math.max(2, Math.round(Math.min(w, h) * 0.008));
+                for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+                    if (x >= m && x < w - m && y >= m && y < h - m) { x = w - m - 1; continue; }
+                    const j = (y * w + x) * 4; d[j] = d[j + 1] = d[j + 2] = 255;
+                }
             } else if (page.filter === 'magic') {
                 documentMagic(d, w, h);
             }
@@ -4280,6 +4299,7 @@
             SC.auto = scLs('sc_auto') !== '0';
             scSetMode(scLs('sc_mode') || 'doc', true);
             document.getElementById('scAutoBtn').classList.toggle('on', SC.auto);
+            scFilterUI();
             scRenderThumbs();
             scHint('جاري تشغيل الكاميرا…');
             await scStartStream();
@@ -4374,6 +4394,28 @@
             document.querySelectorAll('#scCam .sc-mode').forEach(b => b.classList.toggle('on', b.dataset.m === m));
             scResetDetect();
             scIdStepUI();
+        }
+
+        // Filter applied automatically to new scans (default: black & white, like CamScanner)
+        const SC_FILTERS = { bw: 'أبيض وأسود', magic: 'سحري', original: 'الأصلي' };
+        function scDefaultFilter() { const f = scLs('sc_filter'); return SC_FILTERS[f] ? f : 'bw'; }
+        function scSetDefaultFilter(f) {
+            if (!SC_FILTERS[f]) return;
+            scLs('sc_filter', f);
+            scFilterUI();
+        }
+        function scCycleFilter() {
+            const order = ['bw', 'magic', 'original'];
+            const f = order[(order.indexOf(scDefaultFilter()) + 1) % order.length];
+            scSetDefaultFilter(f);
+            showToast('الفلتر التلقائي: ' + SC_FILTERS[f]);
+        }
+        function scFilterUI() {
+            const f = scDefaultFilter();
+            const b = document.getElementById('scFilterBtn');
+            if (b) b.textContent = (f === 'bw' ? '◐ ' : f === 'magic' ? '✨ ' : '🖼 ') + SC_FILTERS[f];
+            const sel = document.getElementById('scFilterSel');
+            if (sel) sel.value = f;
         }
 
         function scToggleAuto() {
@@ -4607,7 +4649,7 @@
                     // cut the page from the full-resolution frame; keep a smaller copy for re-cropping
                     const q = detectDocumentCorners(frame) || quadLive;
                     const raw = downscaleToMax(frame, 2000);
-                    const pg = createPageObj(raw, 'magic');
+                    const pg = createPageObj(raw, scDefaultFilter());
                     if (q) {
                         pg.cropCorners = q;
                         pg.baseCanvas = finishCameraPage(warpPerspective(frame, q, 3000, 7000000));
@@ -4617,7 +4659,7 @@
                 } else if (SC.mode === 'book') {
                     const q = detectDocumentCorners(frame) || quadLive;
                     const flat = q ? warpPerspective(frame, q, 3600, 9000000) : frame;
-                    scSplitSpread(flat).forEach(c => SC.pages.push(createPageObj(enhanceScan(trimDocBorders(c)), 'magic')));
+                    scSplitSpread(flat).forEach(c => SC.pages.push(createPageObj(enhanceScan(trimDocBorders(c)), scDefaultFilter())));
                     frame.width = frame.height = 0;
                 } else {
                     const q = detectDocumentCorners(frame, SC_CARD) || quadLive;
