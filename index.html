@@ -1046,6 +1046,7 @@
         <div class="sc-top">
             <button class="sc-ibtn" onclick="scCancel()" aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button>
             <div class="sc-row">
+                <span id="scRes" style="font-size:11px;font-weight:800;opacity:.7" dir="ltr"></span>
                 <button id="scAutoBtn" class="sc-pill on" onclick="scToggleAuto()">⚡ تلقائي</button>
                 <button id="scTorch" class="sc-ibtn" onclick="scToggleTorch()" aria-label="الفلاش" style="display:none"><i class="fa-solid fa-lightbulb"></i></button>
                 <button id="scNativeBtn" class="sc-pill" onclick="scUseNative()">كاميرا الآيفون</button>
@@ -2942,6 +2943,129 @@
 
         // Filtered copy of a page's base image, cached so the heavy filters
         // run once per change instead of on every redraw/pen stroke
+        // ===================================================================
+        // SCAN QUALITY: magic colour filter, border clean-up, sharpening
+        // ===================================================================
+
+        // "Magic": even out the light (paper becomes white, shadows disappear),
+        // keep colours, darken text a little, keep letter edges smooth.
+        function documentMagic(d, w, h) {
+            const N = w * h, lum = new Float32Array(N);
+            for (let i = 0, j = 0; i < N; i++, j += 4) lum[i] = 0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2];
+            const bg = estimatePaperBackground(lum, w, h);
+            // white balance from the paper itself (removes yellow lamp light / blue daylight casts)
+            let sr = 0, sg = 0, sb = 0, sl = 0, n = 0;
+            for (let i = 0, j = 0; i < N; i += 5, j += 20) {
+                if (lum[i] > 0.92 * bg[i]) { sr += d[j]; sg += d[j + 1]; sb += d[j + 2]; sl += lum[i]; n++; }
+            }
+            const clampG = v => Math.max(0.7, Math.min(1.5, v));
+            const wb = n ? [clampG(sl / sr), clampG(sl / sg), clampG(sl / sb)] : [1, 1, 1];
+            const B = 62, Wt = 236; // black point / white point after normalising
+            const lut = new Uint8ClampedArray(1024); // tone curve, ×4 precision
+            for (let i = 0; i < 1024; i++) {
+                let v = (i / 4 - B) / (Wt - B);
+                v = v < 0 ? 0 : v > 1 ? 1 : v;
+                lut[i] = Math.pow(v, 1.35) * 255;          // darker, crisper text
+            }
+            for (let i = 0, j = 0; i < N; i++, j += 4) {
+                const gain = 250 / Math.max(60, bg[i]) * 4;
+                for (let c = 0; c < 3; c++) {
+                    const v = d[j + c] * wb[c] * gain;
+                    d[j + c] = lut[v > 1023 ? 1023 : v | 0];
+                }
+            }
+        }
+
+        // Remove leftover table / shadow strips along the page edges (max 4 % per side)
+        function trimDocBorders(src) {
+            const s = Math.min(1, 700 / Math.max(src.width, src.height));
+            const w = Math.max(8, Math.round(src.width * s)), h = Math.max(8, Math.round(src.height * s));
+            const t = document.createElement('canvas'); t.width = w; t.height = h;
+            const tc = t.getContext('2d', { willReadFrequently: true });
+            tc.drawImage(src, 0, 0, w, h);
+            const norm = normalizedLuminance(tc.getImageData(0, 0, w, h).data, w, h);
+            const dark = (x, y) => norm[y * w + x] < 150;
+            const lineDirty = (horizontal, k) => {
+                let n = 0, len = horizontal ? w : h;
+                for (let i = 0; i < len; i++) if (horizontal ? dark(i, k) : dark(k, i)) n++;
+                return n / len > 0.025;
+            };
+            const scan = (horizontal, fromEnd) => {
+                const len = horizontal ? h : w, max = Math.round(len * 0.04);
+                let last = -1, clean = 0;
+                for (let k = 0; k < max; k++) {
+                    const idx = fromEnd ? len - 1 - k : k;
+                    if (lineDirty(horizontal, idx)) { last = k; clean = 0; }
+                    else if (last >= 0 && ++clean >= 4) break;
+                    else if (last < 0 && k >= 2) break; // first lines clean → nothing to trim
+                }
+                return last + 1;
+            };
+            const top = scan(true, false), bottom = scan(true, true), left = scan(false, false), right = scan(false, true);
+            if (!top && !bottom && !left && !right) return src;
+            const k = 1 / s, pad = 1;
+            const x0 = Math.round((left ? left + pad : 0) * k), y0 = Math.round((top ? top + pad : 0) * k);
+            const x1 = Math.round(src.width - (right ? right + pad : 0) * k), y1 = Math.round(src.height - (bottom ? bottom + pad : 0) * k);
+            if (x1 - x0 < src.width * 0.85 || y1 - y0 < src.height * 0.85) return src; // safety
+            const out = document.createElement('canvas');
+            out.width = x1 - x0; out.height = y1 - y0;
+            out.getContext('2d').drawImage(src, x0, y0, out.width, out.height, 0, 0, out.width, out.height);
+            return out;
+        }
+
+        // Upscale small camera pages (smooth), then a light unsharp mask
+        function enhanceScan(src, targetLong = 2200) {
+            let c = src;
+            const long = Math.max(src.width, src.height);
+            if (long < targetLong) {
+                const f = Math.min(2, targetLong / long);
+                c = document.createElement('canvas');
+                c.width = Math.round(src.width * f); c.height = Math.round(src.height * f);
+                const x = c.getContext('2d');
+                x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
+                x.drawImage(src, 0, 0, c.width, c.height);
+            } else {
+                c = cloneCanvas(src);
+            }
+            const ctx = c.getContext('2d', { willReadFrequently: true });
+            const w = c.width, h = c.height, img = ctx.getImageData(0, 0, w, h), d = img.data;
+            // blurred luminance (two box passes, radius 2) → add back 70 % of the detail
+            const N = w * h, L = new Float32Array(N);
+            for (let i = 0, j = 0; i < N; i++, j += 4) L[i] = 0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2];
+            const box = (a) => {
+                const t = new Float32Array(N), o = new Float32Array(N), R = 2, D = 2 * R + 1;
+                for (let y = 0; y < h; y++) {
+                    let acc = 0; const row = y * w;
+                    for (let x = -R; x <= R; x++) acc += a[row + Math.min(w - 1, Math.max(0, x))];
+                    for (let x = 0; x < w; x++) {
+                        t[row + x] = acc / D;
+                        acc += a[row + Math.min(w - 1, x + R + 1)] - a[row + Math.max(0, x - R)];
+                    }
+                }
+                for (let x = 0; x < w; x++) {
+                    let acc = 0;
+                    for (let y = -R; y <= R; y++) acc += t[Math.min(h - 1, Math.max(0, y)) * w + x];
+                    for (let y = 0; y < h; y++) {
+                        o[y * w + x] = acc / D;
+                        acc += t[Math.min(h - 1, y + R + 1) * w + x] - t[Math.max(0, y - R) * w + x];
+                    }
+                }
+                return o;
+            };
+            const Bl = box(L);
+            for (let i = 0, j = 0; i < N; i++, j += 4) {
+                const det = (L[i] - Bl[i]) * 0.7;
+                d[j] = d[j] + det; d[j + 1] = d[j + 1] + det; d[j + 2] = d[j + 2] + det;
+            }
+            ctx.putImageData(img, 0, 0);
+            return c;
+        }
+
+        // Full pipeline for a page cut out of a camera frame
+        function finishCameraPage(warped) {
+            return enhanceScan(trimDocBorders(deskewCanvas(warped)));
+        }
+
         function getFilteredBase(page) {
             if (page.filter === 'original' || !page.filter) return page.baseCanvas;
             const c = page._fx;
@@ -2956,11 +3080,7 @@
             if (page.filter === 'bw') {
                 documentBW(d, w, h);
             } else if (page.filter === 'magic') {
-                for (let i = 0; i < d.length; i += 4) {
-                    d[i] = Math.min(255, Math.max(0, (d[i] - 128) * 1.28 + 142));
-                    d[i + 1] = Math.min(255, Math.max(0, (d[i + 1] - 128) * 1.28 + 142));
-                    d[i + 2] = Math.min(255, Math.max(0, (d[i + 2] - 128) * 1.28 + 142));
-                }
+                documentMagic(d, w, h);
             }
             ctx.putImageData(imgData, 0, 0);
             page._fx = { base: page.baseCanvas, filter: page.filter, canvas: out };
@@ -2979,12 +3099,12 @@
         }
 
         // Real perspective warp: maps the 4 corners to a flat rectangle
-        function warpPerspective(src, corners) {
+        function warpPerspective(src, corners, maxDim = 2000, maxPix = 4000000) {
             const P = corners.map(c => [c.x * src.width, c.y * src.height]);
             const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
             let ow = Math.max(dist(P[0], P[1]), dist(P[3], P[2]));
             let oh = Math.max(dist(P[0], P[3]), dist(P[1], P[2]));
-            const cap = Math.min(1, 2000 / Math.max(ow, oh), Math.sqrt(4000000 / (ow * oh)));
+            const cap = Math.min(1, maxDim / Math.max(ow, oh), Math.sqrt(maxPix / (ow * oh)));
             ow = Math.max(60, Math.round(ow * cap));
             oh = Math.max(60, Math.round(oh * cap));
 
@@ -3033,7 +3153,7 @@
                 const corners = detectDocumentCorners(page.rawCanvas);
                 if (!corners) return false;
                 page.cropCorners = corners;
-                page.baseCanvas = deskewCanvas(warpPerspective(page.rawCanvas, corners));
+                page.baseCanvas = trimDocBorders(deskewCanvas(warpPerspective(page.rawCanvas, corners)));
                 return true;
             } catch (e) {
                 console.error(e);
@@ -4125,7 +4245,7 @@
         const SC_NEED = 6;        // steady frames before auto-capture (~1 s)
         const SC_STILL = 5;       // mean grey difference below this = phone held still
         const SC_MOTION = 14;     // above this = page turned / new sheet placed
-        const SC_MAXDIM = 2400;   // longest side kept from a camera frame
+        const SC_MAXDIM = 4096;   // longest side used when cutting the page from a frame
         const SC_CARD = { contrast: true, minArea: 0.04 };
         const SC_CARD_FAST = { contrast: true, minArea: 0.04, fast: true };
         const SC_FAST = { fast: true };
@@ -4186,6 +4306,12 @@
             v.srcObject = SC.stream;
             try { await v.play(); } catch (e) { }
             SC.track = SC.stream.getVideoTracks()[0];
+            try {
+                const st = SC.track.getSettings ? SC.track.getSettings() : {};
+                if (Math.max(st.width || 0, st.height || 0) < 3000)
+                    await SC.track.applyConstraints({ width: { ideal: 3840 }, height: { ideal: 2160 } });
+            } catch (e) { }
+            scShowRes();
             const caps = (SC.track && SC.track.getCapabilities) ? SC.track.getCapabilities() : {};
             document.getElementById('scTorch').style.display = caps.torch ? '' : 'none';
             SC.torch = false;
@@ -4197,6 +4323,16 @@
             SC.running = true;
             scLoop();
             return true;
+        }
+
+        function scShowRes() {
+            const el = document.getElementById('scRes');
+            const v = document.getElementById('scVideo');
+            const upd = () => {
+                const long = Math.max(v.videoWidth, v.videoHeight);
+                el.textContent = !long ? '' : long >= 3000 ? '4K' : long >= 1900 ? '1080p' : long >= 1200 ? '720p' : long + 'p';
+            };
+            upd(); setTimeout(upd, 800); setTimeout(upd, 2500);
         }
 
         function scStopStream() {
@@ -4376,9 +4512,9 @@
             try { if (navigator.vibrate) navigator.vibrate(30); } catch (e) { }
         }
 
-        function scGrabFrame() {
+        function scGrabFrame(maxDim = SC_MAXDIM) {
             const v = document.getElementById('scVideo');
-            const s = Math.min(1, SC_MAXDIM / Math.max(v.videoWidth, v.videoHeight));
+            const s = Math.min(1, maxDim / Math.max(v.videoWidth, v.videoHeight));
             const c = document.createElement('canvas');
             c.width = Math.round(v.videoWidth * s);
             c.height = Math.round(v.videoHeight * s);
@@ -4386,6 +4522,16 @@
             ctx.fillStyle = '#fff';
             ctx.fillRect(0, 0, c.width, c.height);
             ctx.drawImage(v, 0, 0, c.width, c.height);
+            return c;
+        }
+
+        function downscaleToMax(src, maxDim) {
+            const s = maxDim / Math.max(src.width, src.height);
+            if (s >= 1) return src;
+            const c = document.createElement('canvas');
+            c.width = Math.round(src.width * s); c.height = Math.round(src.height * s);
+            const x = c.getContext('2d'); x.imageSmoothingQuality = 'high';
+            x.drawImage(src, 0, 0, c.width, c.height);
             return c;
         }
 
@@ -4458,23 +4604,25 @@
             await new Promise(r => setTimeout(r, 30));
             try {
                 if (SC.mode === 'doc') {
-                    const pg = createPageObj(frame, 'magic');
-                    if (!autoCropPage(pg)) {
-                        if (quadLive) {
-                            pg.cropCorners = quadLive;
-                            pg.baseCanvas = deskewCanvas(warpPerspective(pg.rawCanvas, quadLive));
-                        } else pg.baseCanvas = deskewCanvas(pg.baseCanvas);
-                    }
+                    // cut the page from the full-resolution frame; keep a smaller copy for re-cropping
+                    const q = detectDocumentCorners(frame) || quadLive;
+                    const raw = downscaleToMax(frame, 2000);
+                    const pg = createPageObj(raw, 'magic');
+                    if (q) {
+                        pg.cropCorners = q;
+                        pg.baseCanvas = finishCameraPage(warpPerspective(frame, q, 3000, 7000000));
+                    } else pg.baseCanvas = enhanceScan(deskewCanvas(raw));
+                    if (raw !== frame) frame.width = frame.height = 0;
                     SC.pages.push(pg);
                 } else if (SC.mode === 'book') {
                     const q = detectDocumentCorners(frame) || quadLive;
-                    const flat = q ? warpPerspective(frame, q) : frame;
-                    scSplitSpread(flat).forEach(c => SC.pages.push(createPageObj(c, 'magic')));
+                    const flat = q ? warpPerspective(frame, q, 3600, 9000000) : frame;
+                    scSplitSpread(flat).forEach(c => SC.pages.push(createPageObj(enhanceScan(trimDocBorders(c)), 'magic')));
                     frame.width = frame.height = 0;
                 } else {
                     const q = detectDocumentCorners(frame, SC_CARD) || quadLive;
                     if (!q && auto) { SC.busy = false; return; }
-                    let card = q ? warpPerspective(frame, q) : frame;
+                    let card = q ? warpPerspective(frame, q, 3000, 7000000) : frame;
                     if (card.height > card.width) card = scRotate90(card);
                     if (!SC.idFront) {
                         SC.idFront = card;
