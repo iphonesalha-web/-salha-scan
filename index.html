@@ -2341,9 +2341,213 @@
         // AUTOMATIC DOCUMENT DETECTION + PERSPECTIVE CORRECTION
         // Finds the sheet of paper in a photo and flattens it, fully on-device.
         // ===================================================================
+        // ===================================================================
+        // DOCUMENT DETECTION v2
+        // Collects candidate quadrilaterals from several methods (white-paper
+        // mask, contrast-to-background mask, straight-line Hough search) and
+        // keeps the one whose four sides are real step edges along their whole
+        // length. Thin printed lines (ink on white on both sides), curved table
+        // patterns and the photo border get little support and lose.
+        // ===================================================================
+        const DET_MAXD = 400;
+
+        function detectDocumentCorners(src, opts = {}) {
+            const s = Math.min(1, DET_MAXD / Math.max(src.width, src.height));
+            const W = Math.max(8, Math.round(src.width * s));
+            const H = Math.max(8, Math.round(src.height * s));
+            const c = document.createElement('canvas');
+            c.width = W; c.height = H;
+            const ctx = c.getContext('2d', { willReadFrequently: true });
+            ctx.drawImage(src, 0, 0, W, H);
+            const px = ctx.getImageData(0, 0, W, H).data;
+            const N = W * H;
+            let g = new Float32Array(N);
+            for (let i = 0, j = 0; i < N; i++, j += 4) g[i] = 0.299 * px[j] + 0.587 * px[j + 1] + 0.114 * px[j + 2];
+            g = detBlur3(detBlur3(g, W, H), W, H);
+            const minArea = opts.minArea || 0.12;
+
+            const cands = [];
+            const fromNorm = q => q && cands.push(q.map(p => [p.x * W, p.y * H]));
+            if (!opts.fast) { // live preview skips the slower mask methods
+                try { fromNorm(detectByMask(src, opts)); } catch (e) { }
+                if (!opts.contrast) { try { fromNorm(detectByMask(src, { contrast: true, minArea })); } catch (e) { } }
+            }
+            try { detHoughQuads(g, W, H, minArea).forEach(q => cands.push(q)); } catch (e) { console.error(e); }
+
+            let best = null, bestScore = 0;
+            // candidates from the line search share sides → score each side once
+            const cache = new Map();
+            const support = (P, Q) => {
+                const a = P[0].toFixed(1) + ',' + P[1].toFixed(1), b = Q[0].toFixed(1) + ',' + Q[1].toFixed(1);
+                const k = a < b ? a + '|' + b : b + '|' + a;
+                let v = cache.get(k);
+                if (v === undefined) { v = detEdgeSupport(g, W, H, P, Q); cache.set(k, v); }
+                return v;
+            };
+            for (const q0 of cands) {
+                const q = detOrder(q0);
+                const area = detArea(q) / N;
+                if (area < minArea || area > 0.97 || !detConvex(q)) continue;
+                const sides = [0, 1, 2, 3].map(i => support(q[i], q[(i + 1) % 4]));
+                const mean = (sides[0] + sides[1] + sides[2] + sides[3]) / 4;
+                const minSide = Math.min(...sides);
+                let sc = mean * (minSide >= 0.4 ? 1 : 0.55) * (0.8 + 0.2 * Math.sqrt(area));
+                if (sc > bestScore) { bestScore = sc; best = q; }
+            }
+            if (!best || bestScore < 0.5) return null;
+
+            // pull corners slightly inward so no table edge shows in the result
+            const cx = best.reduce((a, p) => a + p[0], 0) / 4, cy = best.reduce((a, p) => a + p[1], 0) / 4;
+            return best.map(([x, y]) => {
+                const dx = x - cx, dy = y - cy, len = Math.hypot(dx, dy) || 1;
+                return {
+                    x: Math.max(0, Math.min(1, (x - dx / len * 1.2) / W)),
+                    y: Math.max(0, Math.min(1, (y - dy / len * 1.2) / H))
+                };
+            });
+        }
+
+        function detBlur3(a, W, H) {
+            const t = new Float32Array(a.length), o = new Float32Array(a.length);
+            for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+                const i = y * W + x;
+                t[i] = (a[x > 0 ? i - 1 : i] + a[i] + a[x < W - 1 ? i + 1 : i]) / 3;
+            }
+            for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+                const i = y * W + x;
+                o[i] = (t[y > 0 ? i - W : i] + t[i] + t[y < H - 1 ? i + W : i]) / 3;
+            }
+            return o;
+        }
+
+        // Order TL, TR, BR, BL
+        function detOrder(q) {
+            const cx = q.reduce((a, p) => a + p[0], 0) / 4, cy = q.reduce((a, p) => a + p[1], 0) / 4;
+            const o = q.slice().sort((a, b) => Math.atan2(a[1] - cy, a[0] - cx) - Math.atan2(b[1] - cy, b[0] - cx));
+            let st = 0;
+            o.forEach((p, i) => { if (p[0] + p[1] < o[st][0] + o[st][1]) st = i; });
+            return [0, 1, 2, 3].map(i => o[(st + i) % 4]);
+        }
+        function detArea(q) {
+            let a = 0;
+            for (let i = 0; i < 4; i++) { const p = q[i], r = q[(i + 1) % 4]; a += p[0] * r[1] - r[0] * p[1]; }
+            return Math.abs(a) / 2;
+        }
+        function detConvex(q) {
+            let sign = 0;
+            for (let i = 0; i < 4; i++) {
+                const a = q[i], b = q[(i + 1) % 4], c = q[(i + 2) % 4];
+                const cr = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+                if (Math.abs(cr) < 1e-6) return false;
+                if (!sign) sign = Math.sign(cr); else if (Math.sign(cr) !== sign) return false;
+            }
+            // corners must not be too sharp (perspective of a real sheet)
+            for (let i = 0; i < 4; i++) {
+                const a = q[(i + 3) % 4], b = q[i], c = q[(i + 1) % 4];
+                const v1 = [a[0] - b[0], a[1] - b[1]], v2 = [c[0] - b[0], c[1] - b[1]];
+                const cos = (v1[0] * v2[0] + v1[1] * v2[1]) / ((Math.hypot(...v1) * Math.hypot(...v2)) || 1);
+                if (Math.abs(cos) > 0.6) return false; // angle outside ~53°..127°
+            }
+            return true;
+        }
+
+        // Share of points along a side with a clear brightness step across it
+        function detEdgeSupport(g, W, H, P, Q) {
+            const dx = Q[0] - P[0], dy = Q[1] - P[1], len = Math.hypot(dx, dy) || 1;
+            const nx = -dy / len, ny = dx / len, D = 3, T = 9;
+            const K = Math.max(16, Math.min(48, Math.round(len / 4)));
+            const at = (x, y) => {
+                const ix = Math.round(x), iy = Math.round(y);
+                return (ix < 1 || iy < 1 || ix >= W - 1 || iy >= H - 1) ? -1 : g[iy * W + ix];
+            };
+            let hit = 0;
+            for (let k = 0; k < K; k++) {
+                const t = 0.06 + 0.88 * k / (K - 1);
+                const x = P[0] + dx * t, y = P[1] + dy * t;
+                // allow the true edge to be up to 1 px off the line
+                let best = 0;
+                for (let o = -1; o <= 1; o++) {
+                    const a = at(x + nx * (D + o), y + ny * (D + o)), b = at(x - nx * (D - o), y - ny * (D - o));
+                    if (a < 0 || b < 0) continue;
+                    best = Math.max(best, Math.abs(a - b));
+                }
+                if (best > T) hit++;
+            }
+            return hit / K;
+        }
+
+        // Straight lines (Hough, voting only along the gradient direction) → quads
+        function detHoughQuads(g, W, H, minArea) {
+            const N = W * H, mag = new Float32Array(N), ang = new Float32Array(N);
+            const hist = new Uint32Array(256);
+            for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+                const i = y * W + x;
+                const gx = (g[i - W + 1] + 2 * g[i + 1] + g[i + W + 1]) - (g[i - W - 1] + 2 * g[i - 1] + g[i + W - 1]);
+                const gy = (g[i + W - 1] + 2 * g[i + W] + g[i + W + 1]) - (g[i - W - 1] + 2 * g[i - W] + g[i - W + 1]);
+                const m = Math.hypot(gx, gy) / 4;
+                mag[i] = m; ang[i] = Math.atan2(gy, gx);
+                hist[Math.min(255, m | 0)]++;
+            }
+            // edge pixels: any clear step. Every edge pixel votes equally, so a faint
+            // paper edge on a light table counts as much as a strong printed pattern.
+            const thr = 3.5;
+            const diag = Math.ceil(Math.hypot(W, H)), NR = 2 * diag + 1, NT = 180;
+            const cosT = new Float32Array(NT), sinT = new Float32Array(NT);
+            for (let t = 0; t < NT; t++) { cosT[t] = Math.cos(t * Math.PI / 180); sinT[t] = Math.sin(t * Math.PI / 180); }
+            const acc = new Float32Array(NT * NR);
+            for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+                const i = y * W + x;
+                if (mag[i] < thr) continue;
+                let t0 = Math.round(ang[i] * 180 / Math.PI);
+                t0 = ((t0 % 180) + 180) % 180;
+                for (let dt = -3; dt <= 3; dt++) {
+                    const t = (t0 + dt + 180) % 180;
+                    const r = Math.round(x * cosT[t] + y * sinT[t]) + diag;
+                    acc[t * NR + r] += 1;
+                }
+            }
+            // strongest lines with non-maximum suppression
+            const lines = [], minVotes = Math.min(W, H) * 0.12;
+            for (let n = 0; n < 30; n++) {
+                let bi = -1, bv = minVotes;
+                for (let i = 0; i < acc.length; i++) if (acc[i] > bv) { bv = acc[i]; bi = i; }
+                if (bi < 0) break;
+                const t = Math.floor(bi / NR), r = bi % NR - diag;
+                lines.push({ t, r });
+                for (let dt = -7; dt <= 7; dt++) {
+                    let tt = t + dt, rr = r;
+                    if (tt < 0) { tt += 180; rr = -r; } else if (tt >= 180) { tt -= 180; rr = -r; }
+                    for (let dr = -10; dr <= 10; dr++) {
+                        const ri = rr + dr + diag;
+                        if (ri >= 0 && ri < NR) acc[tt * NR + ri] = 0;
+                    }
+                }
+            }
+            const hor = lines.filter(l => Math.abs(l.t - 90) < 40);
+            const ver = lines.filter(l => l.t < 40 || l.t > 140);
+            const cross = (a, b) => {
+                const c1 = cosT[a.t], s1 = sinT[a.t], c2 = cosT[b.t], s2 = sinT[b.t];
+                const det = c1 * s2 - s1 * c2;
+                if (Math.abs(det) < 1e-6) return null;
+                return [(a.r * s2 - s1 * b.r) / det, (c1 * b.r - a.r * c2) / det];
+            };
+            const inside = p => p && p[0] > -0.04 * W && p[0] < 1.04 * W && p[1] > -0.04 * H && p[1] < 1.04 * H;
+            const quads = [];
+            for (let a = 0; a < hor.length; a++) for (let b = a + 1; b < hor.length; b++)
+                for (let c = 0; c < ver.length; c++) for (let d = c + 1; d < ver.length; d++) {
+                    const q = [cross(hor[a], ver[c]), cross(hor[a], ver[d]), cross(hor[b], ver[d]), cross(hor[b], ver[c])];
+                    if (!q.every(inside)) continue;
+                    const cq = q.map(p => [Math.max(0, Math.min(W - 1, p[0])), Math.max(0, Math.min(H - 1, p[1]))]);
+                    if (detArea(cq) < minArea * N) continue;
+                    quads.push(cq);
+                }
+            return quads;
+        }
+
+        // Mask-based candidate (used by detectDocumentCorners above).
         // opts.contrast: find any object that differs from the background (coloured ID cards),
         // instead of looking for white paper. opts.minArea: smallest object share of the photo.
-        function detectDocumentCorners(src, opts = {}) {
+        function detectByMask(src, opts = {}) {
             const MAXD = 360;
             const s = Math.min(1, MAXD / Math.max(src.width, src.height));
             const W = Math.max(8, Math.round(src.width * s));
@@ -3923,6 +4127,8 @@
         const SC_MOTION = 14;     // above this = page turned / new sheet placed
         const SC_MAXDIM = 2400;   // longest side kept from a camera frame
         const SC_CARD = { contrast: true, minArea: 0.04 };
+        const SC_CARD_FAST = { contrast: true, minArea: 0.04, fast: true };
+        const SC_FAST = { fast: true };
         const scDet = document.createElement('canvas');
         const scSig = document.createElement('canvas');
         scSig.width = scSig.height = 16;
@@ -4096,7 +4302,7 @@
                 if (scDet.width !== w || scDet.height !== h) { scDet.width = w; scDet.height = h; }
                 scDet.getContext('2d', { willReadFrequently: true }).drawImage(v, 0, 0, w, h);
                 let quad = null;
-                try { quad = detectDocumentCorners(scDet, SC.mode === 'id' ? SC_CARD : undefined); } catch (e) { }
+                try { quad = detectDocumentCorners(scDet, SC.mode === 'id' ? SC_CARD_FAST : SC_FAST); } catch (e) { }
                 scStep(quad, scSignature(scDet));
                 scDrawOverlay(quad);
             }

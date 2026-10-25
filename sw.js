@@ -1,5 +1,5 @@
 // Bump VERSION whenever you change any file, so iPhones pick up the update.
-const VERSION = 'v9';
+const VERSION = 'v10';
 const SHELL_CACHE = 'salha-scan-shell-' + VERSION;
 const OCR_CACHE = 'salha-scan-ocr-v1'; // large OCR files; only change if you replace them
 
